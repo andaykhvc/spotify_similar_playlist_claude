@@ -27,7 +27,7 @@ async function call<T>(method: string, params: Record<string, string>): Promise<
 
   qs.set("api_key", env.lastfmKey);
   await throttle();
-  const res = await fetch(`${API}?${qs}`, { headers: { "User-Agent": "spotify-similar/0.1" } });
+  const res = await fetch(`${API}?${qs}`, { headers: { "User-Agent": "echo-list/0.1" } });
   const body = await res.json().catch(() => null);
   // Error 6 = "track/artist not found": a normal, cacheable miss.
   if (body?.error === 6) {

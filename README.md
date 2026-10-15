@@ -1,4 +1,4 @@
-# Benzer Playlist
+# Echo List
 
 Spotify'ın kaldırdığı "benzer playlist" özelliğinin yerine: bir playlist linki ver ya da birkaç şarkı seç, Last.fm
 benzerlik verisiyle benzer şarkılardan liste öner. **Giriş gerekmez**; istersen Spotify ile bağlanıp sonucu hesabına

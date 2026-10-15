@@ -18,11 +18,11 @@ type SearchTrack = { uri: string; id: string; title: string; artists: string[]; 
 type GenerateInput = { playlist: string } | { seeds: SearchTrack[] };
 
 const LOGIN_ERRORS: Record<string, string> = {
-  denied: "Spotify izni verilmedi.",
-  state: "Giriş yarıda kaldı, tekrar dene.",
-  spotify: "Spotify girişi başarısız oldu.",
+  denied: "Spotify izni verilmedi. Kaydetmek için tekrar bağlanabilirsin.",
+  state: "Bağlantı yarıda kaldı. Tekrar bağlan.",
+  spotify: "Spotify bağlantısı başarısız oldu. Tekrar dene.",
   login:
-    "Giriş başarısız. App development mode'daysa hesabının Spotify Dashboard → User Management'a eklenmiş olması gerekiyor.",
+    "Spotify bağlantısı reddedildi. Uygulama geliştirme modundayken sadece Spotify Dashboard → User Management'a eklenen hesaplar bağlanabilir.",
 };
 
 // Results survive the Spotify login round-trip so an anonymous user can save what they just generated.
@@ -45,13 +45,13 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
     headers: init?.body ? { "Content-Type": "application/json" } : undefined,
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw Object.assign(new Error(data.error ?? "Bir şeyler ters gitti."), { auth: !!data.auth });
+  if (!res.ok) throw Object.assign(new Error(data.error ?? "Bir şeyler ters gitti, tekrar dene."), { auth: !!data.auth });
   return data as T;
 }
 
 type Phase =
   | { kind: "pick" }
-  | { kind: "loading" }
+  | { kind: "loading"; label: string }
   | { kind: "results"; result: GenerateResult; removed?: string[]; name?: string }
   | { kind: "saved"; url: string; name: string; count: number };
 
@@ -87,7 +87,11 @@ export function SimilarApp() {
 
   async function generate(input: GenerateInput) {
     setError(null);
-    setPhase({ kind: "loading" });
+    setPhase({
+      kind: "loading",
+      label: "seeds" in input ? input.seeds.map((s) => s.title).slice(0, 2).join(", ") : "playlist",
+    });
+    window.scrollTo({ top: 0 });
     try {
       const body =
         "seeds" in input
@@ -95,7 +99,7 @@ export function SimilarApp() {
           : { size, playlist: input.playlist };
       const result = await api<GenerateResult>("/api/similar", { method: "POST", body: JSON.stringify(body) });
       if (!result.tracks.length) {
-        setError("Benzer şarkı bulunamadı. Başka bir playlist ya da şarkı dene.");
+        setError("Bu kaynak için benzer şarkı bulunamadı. Daha bilinen birkaç şarkıyla dene.");
         setPhase({ kind: "pick" });
         return;
       }
@@ -108,15 +112,9 @@ export function SimilarApp() {
 
   let content: React.ReactNode;
   if (user === undefined) {
-    content = <p className="text-muted">Yükleniyor…</p>;
+    content = null;
   } else if (phase.kind === "loading") {
-    content = (
-      <div className="flex flex-1 flex-col items-center justify-center gap-3 pb-24 text-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-line border-t-accent" />
-        <p>Benzer şarkılar aranıyor…</p>
-        <p className="text-sm text-muted">10–30 saniye sürebilir.</p>
-      </div>
-    );
+    content = <Loading label={phase.label} />;
   } else if (phase.kind === "results") {
     content = (
       <Results
@@ -132,66 +130,89 @@ export function SimilarApp() {
       />
     );
   } else if (phase.kind === "saved") {
-    content = (
-      <section className="flex flex-1 flex-col items-start justify-center gap-4 pb-24">
-        <h2 className="text-3xl font-semibold tracking-tight">Kaydedildi.</h2>
-        <p className="text-muted">
-          &quot;{phase.name}&quot; — {phase.count} şarkı, gizli playlist olarak hesabında.
-        </p>
-        <div className="flex gap-3">
-          <a href={phase.url} target="_blank" rel="noreferrer" className="rounded-full bg-accent px-5 py-2.5 font-semibold text-black">
-            Spotify&apos;da aç
-          </a>
-          <button className="rounded-full border border-line px-5 py-2.5" onClick={() => setPhase({ kind: "pick" })}>
-            Bir tane daha
-          </button>
-        </div>
-      </section>
-    );
+    content = <Saved {...phase} onAgain={() => setPhase({ kind: "pick" })} />;
   } else {
     content = <Picker user={user} size={size} setSize={setSize} error={error} onGenerate={generate} onError={fail} />;
   }
 
   return (
-    <Shell user={user} onLogout={() => setUser(null)}>
-      {content}
-    </Shell>
+    <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 pb-16 sm:px-8">
+      <header className="flex h-16 items-center justify-between gap-4 sm:h-20">
+        {phase.kind === "pick" ? <span /> : <SmallMark />}
+        <Account user={user} onLogout={() => setUser(null)} />
+      </header>
+      <main className="flex flex-1 flex-col">{content}</main>
+    </div>
   );
 }
 
-function Shell({ user, onLogout, children }: { user?: User | null; onLogout: () => void; children: React.ReactNode }) {
+function SmallMark() {
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col px-4 py-6 sm:px-6 sm:py-10">
-      <header className="mb-10 flex items-center justify-between gap-4">
-        <span className="text-sm font-semibold tracking-tight">
-          <span className="text-accent">●</span> Benzer Playlist
-        </span>
-        {user ? (
-          <div className="flex min-w-0 items-center gap-3 text-sm text-muted">
-            <span className="truncate">{user.name}</span>
-            <button
-              className="shrink-0 rounded-full border border-line px-3 py-1 transition-colors hover:border-foreground hover:text-foreground"
-              onClick={async () => {
-                await api("/api/auth/logout", { method: "POST" });
-                onLogout();
-              }}
-            >
-              Çıkış
-            </button>
-          </div>
-        ) : (
-          user === null && (
-            <a
-              href="/api/auth/login"
-              className="rounded-full border border-line px-3 py-1 text-sm text-muted transition-colors hover:border-foreground hover:text-foreground"
-            >
-              Spotify ile bağlan
-            </a>
-          )
-        )}
-      </header>
-      <main className="flex flex-1 flex-col">{children}</main>
+    <span className="display flex items-center gap-2 text-lg leading-none tracking-[-0.02em]">
+      <EchoGlyph className="h-5 w-5 text-accent" />
+      Echo List
+    </span>
+  );
+}
+
+function EchoGlyph({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden className={className}>
+      <circle cx="7" cy="12" r="3" fill="currentColor" />
+      <path d="M12 6.5a7.5 7.5 0 0 1 0 11" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" opacity=".75" />
+      <path d="M15.5 3.5a11.5 11.5 0 0 1 0 17" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" opacity=".45" />
+    </svg>
+  );
+}
+
+function Account({ user, onLogout }: { user: User | null | undefined; onLogout: () => void }) {
+  if (user === undefined) return null;
+  if (!user) {
+    return (
+      <a href="/api/auth/login" className="press rounded-full px-3 py-1.5 text-sm text-muted hover:text-ink">
+        Spotify ile bağlan
+      </a>
+    );
+  }
+  return (
+    <div className="flex min-w-0 items-center gap-1 text-sm">
+      <span className="truncate text-muted">{user.name}</span>
+      <button
+        className="press shrink-0 rounded-full px-3 py-1.5 text-muted hover:text-ink"
+        onClick={async () => {
+          await api("/api/auth/logout", { method: "POST" });
+          onLogout();
+        }}
+      >
+        Çıkış yap
+      </button>
     </div>
+  );
+}
+
+/** Text followed by fading outlined copies of itself: the brand's echo. */
+function Echo({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="echo">
+      {children}
+      {[1, 2, 3].map((i) => (
+        <span key={i} aria-hidden className="echo-ghost" style={{ "--i": i } as React.CSSProperties}>
+          {children}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function Wordmark() {
+  return (
+    <h1 className="display text-[clamp(5rem,24vw,9.5rem)] leading-[0.8] tracking-[-0.045em]">
+      <Echo>
+        Echo
+        <br />
+        List
+      </Echo>
+    </h1>
   );
 }
 
@@ -210,42 +231,35 @@ function Picker({
   onGenerate: (input: GenerateInput) => void;
   onError: (e: unknown) => void;
 }) {
-  const [tab, setTab] = useState<"link" | "songs">("link");
+  const [tab, setTab] = useState<0 | 1>(0);
   const [link, setLink] = useState("");
 
   return (
-    <section className="flex flex-col gap-8">
-      <div className="flex flex-col gap-3">
-        <h1 className="max-w-2xl text-3xl font-semibold leading-tight tracking-tight text-balance sm:text-4xl">
-          Bir playlist ya da birkaç şarkı ver, benzerlerini bulalım.
-        </h1>
-        <p className="max-w-xl text-muted text-pretty">
-          Spotify &quot;benzer playlist&quot; özelliğini kaldırdı; bu araç Last.fm verisiyle benzer şarkıları bulur. Giriş
-          gerekmez — sadece sonucu doğrudan Spotify&apos;a kaydetmek istersen bağlanırsın.
+    <section className="flex flex-col">
+      <div className="pt-6 pb-10 sm:pt-10 sm:pb-14">
+        <Wordmark />
+        <p className="mt-7 max-w-[34ch] text-lg leading-snug text-muted text-pretty sm:text-xl">
+          Sevdiğin bir playlist&apos;e ya da birkaç şarkıya benzeyen yeni şarkılar bul. Giriş gerekmez.
         </p>
       </div>
 
       <div className="flex flex-col gap-4">
-        <div role="tablist" className="flex w-fit gap-1 rounded-full border border-line p-1 text-sm">
-          {(
-            [
-              ["link", "Playlist linki"],
-              ["songs", "Şarkılardan başla"],
-            ] as const
-          ).map(([id, label]) => (
+        <div role="tablist" aria-label="Kaynak" className="segmented w-full max-w-sm text-sm font-medium" data-active={tab}>
+          <span className="segmented-thumb" aria-hidden />
+          {["Playlist linki", "Şarkılar"].map((label, i) => (
             <button
-              key={id}
+              key={label}
               role="tab"
-              aria-selected={tab === id}
-              onClick={() => setTab(id)}
-              className={`rounded-full px-4 py-1.5 transition-colors ${tab === id ? "bg-foreground text-background" : "text-muted hover:text-foreground"}`}
+              aria-selected={tab === i}
+              onClick={() => setTab(i as 0 | 1)}
+              className={`relative z-10 rounded-full py-2 transition-colors ${tab === i ? "text-ink" : "text-muted hover:text-ink"}`}
             >
               {label}
             </button>
           ))}
         </div>
 
-        {tab === "link" ? (
+        {tab === 0 ? (
           <form
             className="flex flex-col gap-3 sm:flex-row"
             onSubmit={(e) => {
@@ -257,33 +271,35 @@ function Picker({
               value={link}
               onChange={(e) => setLink(e.target.value)}
               placeholder="open.spotify.com/playlist/…"
-              className="min-w-0 flex-1 rounded-full border border-line bg-surface px-5 py-3 outline-none placeholder:text-muted focus:border-accent"
+              aria-label="Spotify playlist linki"
+              inputMode="url"
+              autoComplete="off"
+              className="field min-w-0 sm:flex-1"
             />
-            <PrimaryButton disabled={!link.trim()}>Benzerini oluştur</PrimaryButton>
+            <PrimaryButton disabled={!link.trim()}>Benzerlerini bul</PrimaryButton>
           </form>
         ) : (
           <SongPicker onGenerate={(seeds) => onGenerate({ seeds })} onError={onError} />
         )}
 
-        <label className="flex items-center gap-4 text-sm text-muted">
-          Şarkı sayısı
-          <input
-            type="range"
-            min={10}
-            max={100}
-            step={5}
-            value={size}
-            onChange={(e) => setSize(Number(e.target.value))}
-            className="w-40 accent-[var(--accent)]"
-          />
-          <span className="w-8 tabular-nums text-foreground">{size}</span>
-        </label>
-        {tab === "link" && (
-          <p className="text-xs text-muted">
-            Herkese açık her playlist olur. Giriş yapmadan veya başkasının playlist&apos;inde ilk 50 şarkı kullanılır.
-          </p>
-        )}
-        {error && <ErrorBox>{error}</ErrorBox>}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
+          <label className="flex items-center gap-3">
+            Kaç şarkı
+            <input
+              type="range"
+              min={10}
+              max={100}
+              step={5}
+              value={size}
+              onChange={(e) => setSize(Number(e.target.value))}
+              className="w-36"
+            />
+            <span className="w-7 tabular-nums text-ink">{size}</span>
+          </label>
+          {tab === 0 && <span>Herkese açık her playlist olur; giriş yoksa ilk 50 şarkısına bakılır.</span>}
+        </div>
+
+        {error && <ErrorNote>{error}</ErrorNote>}
       </div>
 
       {user && <MyPlaylists onPick={(id) => onGenerate({ playlist: id })} onError={onError} />}
@@ -296,8 +312,10 @@ const MAX_SEEDS = 10;
 function SongPicker({ onGenerate, onError }: { onGenerate: (seeds: SearchTrack[]) => void; onError: (e: unknown) => void }) {
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<SearchTrack[]>([]);
+  const [active, setActive] = useState(0);
   const [selected, setSelected] = useState<SearchTrack[]>([]);
   const latest = useRef("");
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const q = query.trim();
@@ -305,9 +323,13 @@ function SongPicker({ onGenerate, onError }: { onGenerate: (seeds: SearchTrack[]
     const timer = setTimeout(() => {
       latest.current = q;
       api<{ tracks: SearchTrack[] }>(`/api/search?q=${encodeURIComponent(q)}`)
-        .then((d) => latest.current === q && setHits(d.tracks))
+        .then((d) => {
+          if (latest.current !== q) return;
+          setHits(d.tracks);
+          setActive(0);
+        })
         .catch(onError);
-    }, 300);
+    }, 250);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
@@ -316,41 +338,61 @@ function SongPicker({ onGenerate, onError }: { onGenerate: (seeds: SearchTrack[]
     setSelected((s) => (s.some((x) => x.uri === t.uri) || s.length >= MAX_SEEDS ? s : [...s, t]));
     setQuery("");
     setHits([]);
+    inputRef.current?.focus();
   };
+
+  const open = hits.length > 0 && query.trim().length >= 2;
+  const full = selected.length >= MAX_SEEDS;
 
   return (
     <div className="flex flex-col gap-3">
       <div className="relative">
         <input
+          ref={inputRef}
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
             if (e.target.value.trim().length < 2) setHits([]);
           }}
           onKeyDown={(e) => {
-            if (e.key === "Escape") setHits([]);
-            if (e.key === "Enter" && hits[0]) {
+            if (!open) return;
+            if (e.key === "ArrowDown" || e.key === "ArrowUp") {
               e.preventDefault();
-              add(hits[0]);
+              setActive((a) => (a + (e.key === "ArrowDown" ? 1 : hits.length - 1)) % hits.length);
+            } else if (e.key === "Enter") {
+              e.preventDefault();
+              add(hits[active]);
+            } else if (e.key === "Escape") {
+              setHits([]);
             }
           }}
-          disabled={selected.length >= MAX_SEEDS}
-          placeholder={selected.length >= MAX_SEEDS ? `En fazla ${MAX_SEEDS} şarkı` : "Şarkı veya sanatçı ara…"}
+          disabled={full}
+          role="combobox"
+          aria-expanded={open}
+          aria-controls="song-results"
+          aria-activedescendant={open ? `song-${active}` : undefined}
           aria-label="Şarkı ara"
-          className="w-full rounded-full border border-line bg-surface px-5 py-3 outline-none placeholder:text-muted focus:border-accent disabled:opacity-50"
+          placeholder={full ? `En fazla ${MAX_SEEDS} şarkı seçebilirsin` : "Şarkı ya da sanatçı ara"}
+          autoComplete="off"
+          className="field w-full disabled:opacity-50"
         />
-        {hits.length > 0 && query.trim().length >= 2 && (
-          <ul className="absolute inset-x-0 top-full z-20 mt-2 max-h-80 overflow-y-auto rounded-2xl border border-line bg-background p-1 shadow-xl">
-            {hits.map((t) => (
-              <li key={t.uri}>
+        {open && (
+          <ul
+            id="song-results"
+            role="listbox"
+            className="popover material absolute inset-x-0 top-full z-20 mt-2 max-h-[22rem] overflow-y-auto rounded-2xl p-1.5"
+          >
+            {hits.map((t, i) => (
+              <li key={t.uri} id={`song-${i}`} role="option" aria-selected={i === active}>
                 <button
+                  onMouseEnter={() => setActive(i)}
                   onClick={() => add(t)}
-                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left hover:bg-surface"
+                  className={`flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left ${i === active ? "bg-ink/[0.06]" : ""}`}
                 >
-                  <Cover src={t.image} className="h-9 w-9 shrink-0 rounded" />
+                  <Cover src={t.image} className="h-10 w-10 shrink-0 rounded-md" />
                   <span className="min-w-0">
-                    <span className="block truncate text-sm font-medium">{t.title}</span>
-                    <span className="block truncate text-xs text-muted">{t.artists.join(", ")}</span>
+                    <span className="block truncate font-medium">{t.title}</span>
+                    <span className="block truncate text-sm text-muted">{t.artists.join(", ")}</span>
                   </span>
                 </button>
               </li>
@@ -360,27 +402,29 @@ function SongPicker({ onGenerate, onError }: { onGenerate: (seeds: SearchTrack[]
       </div>
 
       {selected.length > 0 && (
-        <ul className="flex flex-wrap gap-2">
+        <ul className="flex flex-wrap gap-2" aria-label="Seçilen şarkılar">
           {selected.map((t) => (
-            <li key={t.uri} className="flex max-w-full items-center gap-2 rounded-full border border-line bg-surface py-1 pl-1 pr-2 text-sm">
-              <Cover src={t.image} className="h-6 w-6 shrink-0 rounded-full" />
+            <li key={t.uri} className="chip-in flex max-w-full items-center gap-2 rounded-full bg-raised py-1 pl-1 pr-1 text-sm shadow-[0_1px_2px_rgb(22_26_36/0.08)]">
+              <Cover src={t.image} className="h-7 w-7 shrink-0 rounded-full" />
               <span className="truncate">
-                {t.title} <span className="text-muted">· {t.artists[0]}</span>
+                {t.title} <span className="text-muted">— {t.artists[0]}</span>
               </span>
               <button
-                aria-label={`${t.title} çıkar`}
+                aria-label={`${t.title} şarkısını çıkar`}
                 onClick={() => setSelected((s) => s.filter((x) => x.uri !== t.uri))}
-                className="shrink-0 px-1 text-muted hover:text-foreground"
+                className="press grid h-7 w-7 shrink-0 place-items-center rounded-full text-muted hover:bg-surface hover:text-ink"
               >
-                ×
+                <svg viewBox="0 0 12 12" className="h-3 w-3" aria-hidden>
+                  <path d="M2.5 2.5l7 7m0-7l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                </svg>
               </button>
             </li>
           ))}
         </ul>
       )}
 
-      <PrimaryButton className="w-fit" disabled={!selected.length} onClick={() => onGenerate(selected)}>
-        {selected.length ? `${selected.length} şarkıdan benzer oluştur` : "Önce şarkı seç"}
+      <PrimaryButton className="w-full sm:w-fit" disabled={!selected.length} onClick={() => onGenerate(selected)}>
+        {selected.length ? `${selected.length} şarkının benzerlerini bul` : "Önce birkaç şarkı seç"}
       </PrimaryButton>
     </div>
   );
@@ -397,26 +441,31 @@ function MyPlaylists({ onPick, onError }: { onPick: (id: string) => void; onErro
   }, []);
 
   return (
-    <div className="flex flex-col gap-3">
-      <h2 className="text-sm font-medium text-muted">ya da playlist&apos;lerinden birini seç</h2>
+    <div className="mt-16 flex flex-col gap-5">
+      <h2 className="display text-2xl leading-tight tracking-[-0.02em]">Playlist&apos;lerin</h2>
       {playlists === null ? (
-        <p className="text-sm text-muted">Playlist&apos;ler yükleniyor…</p>
+        <p className="text-muted">Playlist&apos;lerin yükleniyor…</p>
       ) : playlists.length === 0 ? (
-        <p className="text-sm text-muted">Hiç playlist&apos;in yok.</p>
+        <p className="text-muted">Spotify hesabında henüz playlist yok. Yukarıdan bir link ya da şarkı ile başla.</p>
       ) : (
-        <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-          {playlists.map((p) => (
-            <li key={p.id}>
+        <ul className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3">
+          {playlists.map((p, i) => (
+            <li key={p.id} className="arrive" style={{ "--i": i } as React.CSSProperties}>
               <button
                 onClick={() => onPick(p.id)}
-                title={p.fullAccess ? undefined : "Senin olmadığı için ilk 50 şarkısı kullanılır"}
-                className="flex w-full flex-col gap-2 rounded-xl p-2 text-left transition-colors hover:bg-surface"
+                title={p.fullAccess ? undefined : "Senin olmadığı için ilk 50 şarkısına bakılır"}
+                className="press group flex w-full flex-col gap-2.5 text-left"
               >
-                <Cover src={p.image} className="aspect-square w-full rounded-lg" />
-                <span className="truncate text-sm font-medium">{p.name}</span>
-                <span className="truncate text-xs text-muted">
-                  {p.total !== null ? `${p.total} şarkı · ` : ""}
-                  {p.owner}
+                <Cover
+                  src={p.image}
+                  className="aspect-square w-full rounded-xl transition-[box-shadow,transform] duration-200 group-hover:shadow-[var(--shadow)]"
+                />
+                <span className="min-w-0">
+                  <span className="block truncate font-medium">{p.name}</span>
+                  <span className="block truncate text-sm text-muted">
+                    {p.total !== null ? `${p.total} şarkı, ` : ""}
+                    {p.owner}
+                  </span>
                 </span>
               </button>
             </li>
@@ -424,6 +473,45 @@ function MyPlaylists({ onPick, onError }: { onPick: (id: string) => void; onErro
         </ul>
       )}
     </div>
+  );
+}
+
+function Loading({ label }: { label: string }) {
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-8 pb-24 text-center" role="status" aria-live="polite">
+      <div className="ripple" aria-hidden>
+        {[0, 1, 2].map((i) => (
+          <span key={i} style={{ "--i": i } as React.CSSProperties} />
+        ))}
+      </div>
+      <div className="flex flex-col gap-1">
+        <p className="display text-2xl leading-tight tracking-[-0.02em]">
+          {label === "playlist" ? "Playlist dinleniyor…" : `${label} dinleniyor…`}
+        </p>
+        <p className="text-muted">Benzer şarkılar aranıyor. Bu 10–30 saniye sürebilir.</p>
+      </div>
+    </div>
+  );
+}
+
+function Saved({ url, name, count, onAgain }: { url: string; name: string; count: number; onAgain: () => void }) {
+  return (
+    <section className="flex flex-1 flex-col justify-center gap-6 pb-24">
+      <h2 className="display text-[clamp(3rem,10vw,5rem)] leading-[0.95] tracking-[-0.035em]">
+        <Echo>Kaydedildi.</Echo>
+      </h2>
+      <p className="arrive max-w-[40ch] text-lg text-muted" style={{ "--i": 2 } as React.CSSProperties}>
+        &quot;{name}&quot; {count} şarkıyla Spotify hesabına gizli playlist olarak eklendi.
+      </p>
+      <div className="arrive flex flex-wrap gap-3" style={{ "--i": 4 } as React.CSSProperties}>
+        <a href={url} target="_blank" rel="noreferrer" className="btn-primary press">
+          Spotify&apos;da aç
+        </a>
+        <button className="btn-secondary press" onClick={onAgain}>
+          Yeni liste oluştur
+        </button>
+      </div>
+    </section>
   );
 }
 
@@ -447,7 +535,7 @@ function Results({
   error: string | null;
 }) {
   const [removed, setRemoved] = useState<Set<string>>(() => new Set(initialRemoved));
-  const [name, setName] = useState(initialName ?? `${result.source.name} — Benzer`);
+  const [name, setName] = useState(initialName ?? `${result.source.name} (Echo)`);
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
   const kept = useMemo(() => result.tracks.filter((t) => !removed.has(t.uri)), [result.tracks, removed]);
@@ -459,7 +547,7 @@ function Results({
         method: "POST",
         body: JSON.stringify({
           name,
-          description: `"${result.source.name}" benzeri şarkılar.`,
+          description: `"${result.source.name}" ile benzer şarkılar. Echo List ile oluşturuldu.`,
           uris: kept.map((t) => t.uri),
         }),
       });
@@ -481,7 +569,7 @@ function Results({
     }
   }
 
-  function loginToSave() {
+  function connectToSave() {
     try {
       const pending: Pending = { result, removed: [...removed], name };
       sessionStorage.setItem(PENDING_KEY, JSON.stringify(pending));
@@ -491,61 +579,35 @@ function Results({
     window.location.href = "/api/auth/login";
   }
 
-  const { source, stats } = result;
+  const { source } = result;
   return (
-    <section className="flex flex-col gap-6">
-      <div className="flex flex-col gap-1">
-        <button onClick={onBack} className="w-fit text-sm text-muted hover:text-foreground">
-          ← Geri
-        </button>
-        <h1 className="text-2xl font-semibold tracking-tight">&quot;{source.name}&quot; benzeri</h1>
-        <p className="text-sm text-muted">
-          {source.trackCount} şarkı{source.partial ? " (playlist'in ilk kısmı)" : ""}, {stats.seeds} tanesi tohum olarak
-          kullanıldı · {kept.length} öneri
+    <section className="flex flex-col">
+      <button onClick={onBack} className="press -ml-2 flex w-fit items-center gap-1 rounded-full px-2 py-1 text-muted hover:text-ink">
+        <svg viewBox="0 0 16 16" className="h-4 w-4" aria-hidden>
+          <path d="M10 3L5 8l5 5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        Yeni arama
+      </button>
+
+      <div className="mt-6 mb-8 flex flex-col gap-3">
+        <h1 className="display text-[clamp(2.25rem,7vw,3.75rem)] leading-[0.98] tracking-[-0.03em] text-balance">{source.name}</h1>
+        <p className="text-muted">
+          {source.partial ? `Playlist'in ilk ${source.trackCount} şarkısına` : `${source.trackCount} şarkıya`} benzeyen{" "}
+          {kept.length} şarkı. Beğenmediklerini çıkar, kalanları kaydet.
         </p>
       </div>
 
-      <div className="sticky top-0 z-10 -mx-4 flex flex-col gap-3 border-b border-line bg-background/90 px-4 py-3 backdrop-blur sm:flex-row">
-        {loggedIn ? (
-          <>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              maxLength={100}
-              aria-label="Playlist adı"
-              className="min-w-0 flex-1 rounded-full border border-line bg-surface px-5 py-2.5 outline-none focus:border-accent"
-            />
-            <PrimaryButton onClick={save} disabled={saving || !kept.length || !name.trim()}>
-              {saving ? "Kaydediliyor…" : `Spotify'a kaydet (${kept.length})`}
-            </PrimaryButton>
-          </>
-        ) : (
-          <>
-            <PrimaryButton onClick={loginToSave} disabled={!kept.length}>
-              Spotify&apos;a kaydetmek için bağlan
-            </PrimaryButton>
-            <button
-              onClick={copyLinks}
-              disabled={!kept.length}
-              className="rounded-full border border-line px-5 py-2.5 transition-colors hover:border-foreground disabled:opacity-40"
-            >
-              {copied ? "Kopyalandı ✓" : `Linkleri kopyala (${kept.length})`}
-            </button>
-          </>
-        )}
-      </div>
-      {!loggedIn && (
-        <p className="-mt-3 text-xs text-muted">
-          Linkleri kopyalayıp Spotify masaüstü uygulamasında bir playlist&apos;e yapıştırırsan (Ctrl/Cmd+V) şarkılar eklenir.
-        </p>
+      {error && (
+        <div className="mb-6">
+          <ErrorNote>{error}</ErrorNote>
+        </div>
       )}
-      {error && <ErrorBox>{error}</ErrorBox>}
 
       <ol className="flex flex-col">
         {result.tracks.map((t, i) => (
           <TrackRow
             key={t.uri}
-            index={i + 1}
+            index={i}
             track={t}
             removed={removed.has(t.uri)}
             onToggle={() =>
@@ -559,6 +621,50 @@ function Results({
           />
         ))}
       </ol>
+
+      {/* Floating action bar: a translucent layer the list scrolls under. */}
+      <div className="sticky bottom-0 z-10 -mx-4 mt-8 px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] material sm:-mx-8 sm:px-8 [mask-image:linear-gradient(to_bottom,transparent,black_12px)]">
+        {loggedIn ? (
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              maxLength={100}
+              aria-label="Yeni playlist'in adı"
+              className="field min-w-0 sm:flex-1"
+            />
+            <PrimaryButton onClick={save} disabled={saving || !kept.length || !name.trim()}>
+              {saving ? "Kaydediliyor…" : `Spotify'a kaydet (${kept.length})`}
+            </PrimaryButton>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <div className="flex gap-2">
+              <PrimaryButton onClick={connectToSave} disabled={!kept.length} className="min-w-0 flex-1 text-[0.9375rem] [--btn-px:0.75rem] sm:text-base sm:[--btn-px:1.5rem]">
+                <span className="sm:hidden">Spotify&apos;a kaydet</span>
+                <span className="hidden sm:inline">Bağlan ve Spotify&apos;a kaydet</span>
+              </PrimaryButton>
+              <button onClick={copyLinks} disabled={!kept.length} className="btn-secondary press min-w-0 flex-1 text-[0.9375rem] [--btn-px:0.75rem] sm:text-base sm:[--btn-px:1.5rem]" aria-live="polite">
+                {copied ? (
+                  <span key="done" className="swap inline-flex items-center gap-1.5">
+                    <svg viewBox="0 0 16 16" className="h-4 w-4 text-accent" aria-hidden>
+                      <path d="M3 8.5l3.2 3L13 4.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    Kopyalandı
+                  </span>
+                ) : (
+                  <span key="idle" className="swap inline-flex">
+                    Linkleri kopyala<span className="hidden sm:inline">&nbsp;({kept.length})</span>
+                  </span>
+                )}
+              </button>
+            </div>
+            <p className="text-center text-xs text-muted sm:text-left">
+              Kopyaladığın linkleri Spotify masaüstü uygulamasında bir playlist&apos;e yapıştırırsan şarkılar eklenir.
+            </p>
+          </div>
+        )}
+      </div>
     </section>
   );
 }
@@ -576,51 +682,63 @@ function TrackRow({
 }) {
   return (
     <li
-      className={`flex items-center gap-3 rounded-lg px-2 py-2 transition-opacity hover:bg-surface ${removed ? "opacity-35" : ""}`}
+      className="arrive group -mx-3 flex items-center gap-4 rounded-2xl px-3 py-2.5 hover:bg-raised/70"
+      style={{ "--i": index } as React.CSSProperties}
     >
-      <span className="w-6 shrink-0 text-right text-sm tabular-nums text-muted">{index}</span>
-      <Cover src={track.image} className="h-11 w-11 shrink-0 rounded" />
-      <div className="min-w-0 flex-1">
+      <Cover src={track.image} className={`h-14 w-14 shrink-0 rounded-lg transition-opacity ${removed ? "opacity-30" : ""}`} />
+      <div className={`min-w-0 flex-1 transition-opacity ${removed ? "opacity-40" : ""}`}>
         <a
           href={`https://open.spotify.com/track/${track.id}`}
           target="_blank"
           rel="noreferrer"
-          className={`block truncate font-medium hover:underline ${removed ? "line-through" : ""}`}
+          className={`block truncate font-medium decoration-1 underline-offset-2 hover:underline ${removed ? "line-through" : ""}`}
         >
           {track.name}
         </a>
-        <p className="truncate text-sm text-muted">
-          {track.artists.join(", ")}
-          {track.because.length > 0 && <span className="hidden sm:inline"> · benziyor: {track.because.join(", ")}</span>}
-        </p>
+        <p className="truncate text-muted">{track.artists.join(", ")}</p>
+        {track.because.length > 0 && (
+          <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-muted">
+            <EchoGlyph className="h-3.5 w-3.5 shrink-0 text-accent" />
+            <span className="truncate">{track.because.join(", ")} yankısı</span>
+          </p>
+        )}
       </div>
       <button
         onClick={onToggle}
-        aria-label={removed ? "Geri ekle" : "Çıkar"}
-        className="shrink-0 rounded-full border border-line px-3 py-1 text-xs text-muted transition-colors hover:border-foreground hover:text-foreground"
+        aria-label={removed ? `${track.name} şarkısını geri ekle` : `${track.name} şarkısını çıkar`}
+        className={`press shrink-0 rounded-full px-3 py-1.5 text-sm ${removed ? "bg-surface text-ink" : "text-muted hover:bg-surface hover:text-ink"}`}
       >
-        {removed ? "Geri al" : "Çıkar"}
+        {removed ? "Geri ekle" : "Çıkar"}
       </button>
     </li>
   );
 }
 
 function PrimaryButton({ className = "", ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  return <button {...props} className={`btn-primary press ${className}`} />;
+}
+
+function ErrorNote({ children }: { children: React.ReactNode }) {
   return (
-    <button
-      {...props}
-      className={`rounded-full bg-accent px-6 py-3 font-semibold text-black transition-transform active:scale-[0.97] disabled:opacity-40 disabled:active:scale-100 ${className}`}
-    />
+    <p role="alert" className="flex gap-3 rounded-2xl bg-danger/10 px-4 py-3 text-sm leading-relaxed text-ink">
+      <svg viewBox="0 0 16 16" className="mt-0.5 h-4 w-4 shrink-0 text-danger" aria-hidden>
+        <circle cx="8" cy="8" r="7" fill="currentColor" />
+        <path d="M8 4.5v4.2M8 11.2v.1" stroke="var(--bg)" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+      <span>{children}</span>
+    </p>
   );
 }
 
-function ErrorBox({ children }: { children: React.ReactNode }) {
-  return <p className="rounded-lg border border-danger/40 bg-danger/10 px-4 py-3 text-sm">{children}</p>;
-}
-
 function Cover({ src, className }: { src: string | null; className: string }) {
-  if (!src) return <div className={`${className} bg-surface`} />;
+  if (!src) {
+    return (
+      <div className={`${className} grid place-items-center bg-surface text-muted`}>
+        <EchoGlyph className="h-1/3 w-1/3 opacity-60" />
+      </div>
+    );
+  }
   // Spotify CDN images are already sized; next/image optimisation adds nothing here.
   // eslint-disable-next-line @next/next/no-img-element
-  return <img src={src} alt="" loading="lazy" className={`${className} object-cover bg-surface`} />;
+  return <img src={src} alt="" loading="lazy" className={`${className} bg-surface object-cover`} />;
 }

@@ -1,40 +1,316 @@
 @import "tailwindcss";
 
+/* Echo List — cool mist paper, ink, one cobalt signal. */
 :root {
-  --background: #fafaf9;
-  --foreground: #1c1917;
-  --surface: #f0efed;
-  --line: #dedbd7;
-  --muted: #78716c;
-  --accent: #1db954;
-  --danger: #dc2626;
+  --bg: #eef0f4;
+  --surface: #e3e6ed;
+  --raised: #ffffff;
+  --ink: #161a24;
+  --muted: #646b7c;
+  --line: #d3d7e0;
+  --accent: #2b45f5;
+  --accent-ink: #ffffff;
+  --danger: #c8322b;
+  --thumb: #ffffff;
+  --material: rgb(238 240 244 / 0.72);
+  --shadow: 0 12px 32px -12px rgb(22 26 36 / 0.25);
+  color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0c0c0c;
-    --foreground: #f2f2f2;
-    --surface: #1a1a1a;
-    --line: #2e2e2e;
-    --muted: #9a9a9a;
-    --accent: #1ed760;
-    --danger: #f87171;
+    --bg: #0f121a;
+    --surface: #1a1e29;
+    --raised: #161a24;
+    --ink: #eceef4;
+    --muted: #8d94a6;
+    --line: #2a3040;
+    --accent: #8a9bff;
+    --accent-ink: #0f121a;
+    --danger: #ff7a70;
+    --thumb: #333a4d;
+    --material: rgb(15 18 26 / 0.72);
+    --shadow: 0 12px 32px -12px rgb(0 0 0 / 0.6);
+    color-scheme: dark;
   }
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-bg: var(--bg);
   --color-surface: var(--surface);
-  --color-line: var(--line);
+  --color-raised: var(--raised);
+  --color-ink: var(--ink);
   --color-muted: var(--muted);
+  --color-line: var(--line);
   --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
   --color-danger: var(--danger);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-bricolage), system-ui, sans-serif;
+  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--bg);
+  color: var(--ink);
+  font: 100%/1.5 var(--font-sans);
+  -webkit-tap-highlight-color: transparent;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Component classes. They are unlayered, so they would beat Tailwind utilities on the same
+   element: keep out of them anything markup tweaks per use (leading, tracking, padding). */
+/* Display type: tight leading, negative tracking that grows with size. */
+.display {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-weight: 700;
+}
+
+/* Instant press feedback on pointer-down. */
+.press {
+  transition: transform 100ms ease-out, opacity 150ms ease-out, background-color 150ms ease-out;
+}
+.press:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* ── The echo wordmark: the name, followed by fading outlined copies of itself. ── */
+.echo {
+  position: relative;
+  isolation: isolate;
+  display: inline-block;
+}
+.echo-ghost {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  color: transparent;
+  -webkit-text-stroke: 1.25px var(--accent);
+  pointer-events: none;
+  user-select: none;
+  transform: translateX(calc(var(--i) * 0.11em));
+  opacity: calc(0.8 - var(--i) * 0.22);
+  animation: echo-out 1100ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(120ms + var(--i) * 110ms);
+}
+@keyframes echo-out {
+  from {
+    transform: translateX(0);
+    opacity: 0;
+  }
+}
+
+/* ── Loading: sound rings travelling outward. ── */
+.ripple {
+  position: relative;
+  width: 7rem;
+  height: 7rem;
+}
+.ripple::before {
+  content: "";
+  position: absolute;
+  inset: 42%;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.ripple span {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1.5px solid var(--accent);
+  opacity: 0;
+  animation: ripple 2400ms cubic-bezier(0.2, 0.6, 0.3, 1) infinite;
+  animation-delay: calc(var(--i) * 800ms);
+}
+@keyframes ripple {
+  from {
+    transform: scale(0.2);
+    opacity: 0.9;
+  }
+  to {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+/* ── Segmented control with a sliding thumb. ── */
+.segmented {
+  position: relative;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--surface);
+}
+.segmented-thumb {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc(50% - 3px);
+  border-radius: 999px;
+  background: var(--thumb);
+  box-shadow: 0 1px 2px rgb(22 26 36 / 0.12), 0 2px 8px -2px rgb(22 26 36 / 0.12);
+  transition: transform 320ms cubic-bezier(0.3, 0.9, 0.3, 1);
+}
+.segmented[data-active="1"] .segmented-thumb {
+  transform: translateX(100%);
+}
+
+/* ── Translucent material for floating chrome; content scrolls underneath. ── */
+.material {
+  background: var(--material);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+}
+
+/* ── Controls. One radius family: fully round for actions and fields. ── */
+.field {
+  height: 3.25rem;
+  padding: 0 1.25rem;
+  border-radius: 999px;
+  background: var(--raised);
+  color: var(--ink);
+  font-size: 1.0625rem;
+  box-shadow: inset 0 0 0 1px var(--line);
+  outline: none;
+  transition: box-shadow 150ms ease-out;
+}
+.field::placeholder {
+  color: var(--muted);
+}
+.field:focus {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.btn-primary,
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 3.25rem;
+  padding: 0 var(--btn-px, 1.5rem);
+  border-radius: 999px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.btn-primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.btn-primary:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--accent) 88%, var(--ink));
+}
+.btn-secondary {
+  background: var(--raised);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.btn-primary:disabled,
+.btn-secondary:disabled {
+  opacity: 0.4;
+}
+
+/* Popovers materialise from the field above them. */
+.popover {
+  box-shadow: var(--shadow), inset 0 0 0 1px var(--line);
+  transform-origin: top center;
+  animation: materialize 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes materialize {
+  from {
+    opacity: 0;
+    transform: scale(0.98) translateY(-4px);
+  }
+}
+
+/* Native range, tinted. */
+input[type="range"] {
+  accent-color: var(--accent);
+}
+
+/* New result rows arrive once, as a short cascade. */
+.arrive {
+  animation: arrive 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: calc(min(var(--i), 12) * 28ms);
+}
+@keyframes arrive {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+/* Content that mounts in place (a swapped label, a picked song) settles in instead of
+   popping. Entry only: leaving stays instant, so rapid repeats never queue up. */
+.swap,
+.chip-in {
+  transition:
+    opacity 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@starting-style {
+  .swap,
+  .chip-in {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+.chip-in {
+  transform-origin: left center;
+  transition-duration: 180ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .echo-ghost,
+  .arrive,
+  .popover {
+    animation: none;
+  }
+  .ripple span {
+    animation: none;
+    opacity: calc(0.6 - var(--i) * 0.2);
+    transform: scale(calc(0.45 + var(--i) * 0.27));
+  }
+  .segmented-thumb,
+  .press {
+    transition-duration: 1ms;
+  }
+  .press:active:not(:disabled) {
+    transform: none;
+  }
+  .swap,
+  .chip-in {
+    transition: opacity 120ms ease-out;
+  }
+  @starting-style {
+    .swap,
+    .chip-in {
+      transform: none;
+    }
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .material {
+    background: var(--bg);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --muted: var(--ink);
+    --line: var(--ink);
+  }
 }

@@ -33,14 +33,14 @@ export function parseEmbedHtml(html: string): EmbedPlaylist | null {
 
 export async function fetchEmbedPlaylist(id: string): Promise<EmbedPlaylist> {
   const res = await fetch(`https://open.spotify.com/embed/playlist/${id}`, {
-    headers: { "User-Agent": "Mozilla/5.0 (compatible; spotify-similar/0.1)", "Accept-Language": "en" },
+    headers: { "User-Agent": "Mozilla/5.0 (compatible; echo-list/0.1)", "Accept-Language": "en" },
   });
   const parsed = res.ok ? parseEmbedHtml(await res.text()) : null;
   if (!parsed || !parsed.tracks.length) {
     throw new UserFacingError(
       res.status === 404
         ? "Bu playlist bulunamadı. Linkin doğru ve playlist'in herkese açık olduğundan emin ol."
-        : "Bu playlist şu an okunamadı. Gizli olabilir; 'Şarkılardan başla' sekmesiyle birkaç şarkı seçerek dene.",
+        : "Bu playlist şu an okunamadı. Gizli olabilir; 'Şarkılar' sekmesinden birkaç şarkı seçerek dene.",
     );
   }
   return parsed;
