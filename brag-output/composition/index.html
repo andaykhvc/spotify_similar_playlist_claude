@@ -1,0 +1,837 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>Echo List — brag</title>
+    <script src="assets/vendor/gsap.min.js"></script>
+    <script src="assets/audio-data.js"></script>
+    <style>
+      @font-face {
+        font-family: "Bricolage Grotesque";
+        font-style: normal;
+        font-weight: 200 800;
+        font-stretch: 75% 100%;
+        src: url("assets/fonts/bricolage-latin.woff2") format("woff2");
+        unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+          U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+      }
+      @font-face {
+        font-family: "Bricolage Grotesque";
+        font-style: normal;
+        font-weight: 200 800;
+        font-stretch: 75% 100%;
+        src: url("assets/fonts/bricolage-latin-ext.woff2") format("woff2");
+        unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308,
+          U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113,
+          U+2C60-2C7F, U+A720-A7FF;
+      }
+
+      :root {
+        --bg: #eef0f4;
+        --surface: #e3e6ed;
+        --raised: #ffffff;
+        --ink: #161a24;
+        --muted: #646b7c;
+        --line: #d3d7e0;
+        --accent: #2b45f5;
+        --display: "Bricolage Grotesque", system-ui, sans-serif;
+        --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: var(--sans);
+        -webkit-font-smoothing: antialiased;
+      }
+      #root {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: var(--bg);
+      }
+      .clip {
+        position: absolute;
+        inset: 0;
+      }
+      .display {
+        font-family: var(--display);
+        font-weight: 700;
+        font-optical-sizing: auto;
+      }
+
+      /* ── Background: mist, dot texture, cobalt echo rings, music-driven glow ── */
+      #bg-dots {
+        position: absolute;
+        left: 0;
+        top: -40px;
+        width: 1920px;
+        height: 1160px;
+        background-image: radial-gradient(rgb(22 26 36 / 0.08) 1.6px, transparent 1.8px);
+        background-size: 32px 32px;
+      }
+      #bg-glow {
+        position: absolute;
+        left: 820px;
+        top: 40px;
+        width: 1000px;
+        height: 1000px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgb(43 69 245 / 0.22) 0%, rgb(43 69 245 / 0.08) 45%, transparent 70%);
+        opacity: 0.6;
+      }
+      #bg-rings {
+        position: absolute;
+        left: 1320px;
+        top: 540px;
+        width: 0;
+        height: 0;
+      }
+      .ring {
+        position: absolute;
+        border-radius: 50%;
+        border: 3px solid var(--accent);
+      }
+
+      /* ── Shared text styles ── */
+      .lead {
+        position: absolute;
+        left: 140px;
+        width: 1500px;
+      }
+      .hook {
+        top: 330px;
+        font-size: 112px;
+        line-height: 1;
+        letter-spacing: -0.04em;
+        max-width: 1300px;
+        margin: 0;
+      }
+      .answer {
+        top: 600px;
+        font-size: 112px;
+        line-height: 1;
+        letter-spacing: -0.04em;
+        color: var(--accent);
+        margin: 0;
+        opacity: 0;
+      }
+
+      /* Echo wordmark: the name and three outlined copies trailing it. */
+      .echo {
+        position: relative;
+        display: inline-block;
+        isolation: isolate;
+      }
+      .echo .line {
+        display: block;
+      }
+      .ghost {
+        position: absolute;
+        left: 0;
+        top: 0;
+        z-index: -1;
+        /* Outline-only echo (the app's look); decorative, so marked data-layout-ignore. */
+        color: transparent;
+        -webkit-text-stroke: 3px var(--accent);
+      }
+      .wordmark {
+        position: absolute;
+        left: 140px;
+        font-size: 300px;
+        line-height: 0.8;
+        letter-spacing: -0.045em;
+        margin: 0;
+      }
+      .sub {
+        position: absolute;
+        left: 146px;
+        font-size: 48px;
+        line-height: 1.2;
+        color: var(--muted);
+        margin: 0;
+        opacity: 0;
+      }
+
+      /* ── Product card (recreated app UI, scaled for video) ── */
+      .step {
+        position: absolute;
+        left: 140px;
+        top: 380px;
+        width: 640px;
+        font-size: 104px;
+        line-height: 0.98;
+        letter-spacing: -0.04em;
+        margin: 0;
+        opacity: 0;
+      }
+      #card {
+        position: absolute;
+        left: 860px;
+        top: 86px;
+        width: 920px;
+        height: 908px;
+        border-radius: 48px;
+        background: var(--raised);
+        box-shadow: 0 40px 90px -40px rgb(22 26 36 / 0.35), 0 0 0 2px var(--line);
+        opacity: 0;
+      }
+      .layer {
+        position: absolute;
+        inset: 0;
+      }
+      .segmented {
+        position: absolute;
+        left: 56px;
+        top: 56px;
+        width: 520px;
+        height: 76px;
+        border-radius: 999px;
+        background: var(--surface);
+      }
+      .seg-thumb {
+        position: absolute;
+        left: 263px;
+        top: 5px;
+        width: 252px;
+        height: 66px;
+        border-radius: 999px;
+        background: var(--raised);
+        box-shadow: 0 2px 6px rgb(22 26 36 / 0.14);
+      }
+      .seg-label {
+        position: absolute;
+        top: 0;
+        width: 260px;
+        height: 76px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 28px;
+        font-weight: 600;
+      }
+      .field {
+        position: absolute;
+        left: 56px;
+        top: 164px;
+        width: 808px;
+        height: 96px;
+        border-radius: 999px;
+        background: var(--raised);
+        box-shadow: inset 0 0 0 3px var(--accent);
+      }
+      .field-text,
+      .placeholder {
+        position: absolute;
+        left: 40px;
+        top: 0;
+        height: 96px;
+        display: flex;
+        align-items: center;
+        font-size: 36px;
+        white-space: pre;
+      }
+      .placeholder {
+        color: var(--muted);
+      }
+      .field-text span {
+        opacity: 0;
+      }
+      .caret {
+        position: absolute;
+        left: 40px;
+        top: 26px;
+        width: 3px;
+        height: 44px;
+        background: var(--accent);
+        border-radius: 2px;
+        opacity: 0;
+      }
+      .dropdown {
+        position: absolute;
+        left: 56px;
+        top: 276px;
+        width: 808px;
+        border-radius: 32px;
+        background: var(--raised);
+        box-shadow: 0 30px 60px -24px rgb(22 26 36 / 0.35), 0 0 0 2px var(--line);
+        padding: 12px;
+        box-sizing: border-box;
+        opacity: 0;
+        transform-origin: 50% 0%;
+        z-index: 5;
+      }
+      .opt {
+        display: flex;
+        align-items: center;
+        gap: 22px;
+        height: 104px;
+        padding: 0 20px;
+        border-radius: 22px;
+      }
+      .opt.active {
+        background: rgb(22 26 36 / 0.06);
+      }
+      .cover {
+        flex: none;
+        display: grid;
+        place-items: center;
+        background: var(--surface);
+        color: var(--muted);
+      }
+      .cover svg {
+        width: 40%;
+        height: 40%;
+        opacity: 0.75;
+      }
+      .t-title {
+        display: block;
+        font-size: 32px;
+        font-weight: 600;
+        line-height: 1.2;
+      }
+      .t-artist {
+        display: block;
+        font-size: 26px;
+        line-height: 1.2;
+        color: var(--muted);
+      }
+      .chips {
+        position: absolute;
+        left: 56px;
+        top: 292px;
+        display: flex;
+        gap: 14px;
+      }
+      .chip {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        height: 68px;
+        padding: 0 26px 0 10px;
+        border-radius: 999px;
+        background: var(--bg);
+        font-size: 28px;
+        opacity: 0;
+        transform-origin: 0% 50%;
+      }
+      .chip .muted {
+        color: var(--muted);
+      }
+      .btn {
+        position: absolute;
+        height: 96px;
+        border-radius: 999px;
+        font-size: 32px;
+        font-weight: 600;
+      }
+      .btn-label {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        white-space: nowrap;
+      }
+      #go {
+        left: 56px;
+        top: 392px;
+        width: 600px;
+      }
+      #go-off {
+        border-radius: 999px;
+        background: var(--surface);
+        color: var(--muted);
+      }
+      #go-on1,
+      #go-on2 {
+        border-radius: 999px;
+        background: var(--accent);
+        color: #ffffff;
+        opacity: 0;
+      }
+
+      /* Loading */
+      #loading {
+        opacity: 0;
+      }
+      .ripple {
+        position: absolute;
+        left: 400px;
+        top: 250px;
+        width: 120px;
+        height: 120px;
+      }
+      .ripple .dot {
+        position: absolute;
+        left: 46px;
+        top: 46px;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+      .ripple .r {
+        position: absolute;
+        left: -40px;
+        top: -40px;
+        width: 200px;
+        height: 200px;
+        border-radius: 50%;
+        border: 3px solid var(--accent);
+        opacity: 0;
+      }
+      .loading-text {
+        position: absolute;
+        left: 0;
+        width: 920px;
+        text-align: center;
+        margin: 0;
+      }
+
+      /* Results */
+      #results {
+        opacity: 0;
+      }
+      .res-title {
+        position: absolute;
+        left: 56px;
+        top: 48px;
+        font-size: 60px;
+        letter-spacing: -0.03em;
+        line-height: 1;
+        margin: 0;
+        opacity: 0;
+      }
+      .res-sub {
+        position: absolute;
+        left: 58px;
+        top: 126px;
+        font-size: 28px;
+        color: var(--muted);
+        margin: 0;
+        opacity: 0;
+      }
+      .row {
+        position: absolute;
+        left: 44px;
+        width: 832px;
+        height: 108px;
+        display: flex;
+        align-items: center;
+        gap: 24px;
+        padding: 0 12px;
+        box-sizing: border-box;
+        opacity: 0;
+      }
+      .tag {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 24px;
+        line-height: 1.2;
+        color: var(--muted);
+      }
+      .tag svg {
+        width: 24px;
+        height: 24px;
+        color: var(--accent);
+      }
+      .bar {
+        position: absolute;
+        left: 0;
+        top: 776px;
+        width: 920px;
+        height: 132px;
+        border-top: 2px solid var(--line);
+        opacity: 0;
+      }
+      #save {
+        left: 56px;
+        top: 18px;
+        width: 392px;
+        background: var(--accent);
+        color: #ffffff;
+      }
+      #copy {
+        left: 472px;
+        top: 18px;
+        width: 392px;
+        background: var(--raised);
+        color: var(--ink);
+        box-shadow: inset 0 0 0 3px var(--line);
+      }
+      #copy-done {
+        opacity: 0;
+        gap: 12px;
+      }
+      #copy-done svg {
+        width: 34px;
+        height: 34px;
+        color: var(--accent);
+      }
+
+      /* Cursor */
+      #cursor {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 56px;
+        height: 56px;
+        z-index: 20;
+        opacity: 0;
+        transform-origin: 8px 6px;
+      }
+
+      /* Outro */
+      .url {
+        position: absolute;
+        left: 146px;
+        top: 836px;
+        font-size: 34px;
+        color: var(--ink);
+        margin: 0;
+        opacity: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="echo-brag" data-start="0" data-width="1920" data-height="1080" data-duration="15">
+      <!-- Persistent background -->
+      <section id="bg" class="clip" data-start="0" data-duration="15" data-track-index="0">
+        <div id="bg-dots"></div>
+        <div id="bg-glow"></div>
+        <div id="bg-rings">
+          <div class="ring" style="left: -260px; top: -260px; width: 520px; height: 520px; opacity: 0.22"></div>
+          <div class="ring" style="left: -430px; top: -430px; width: 860px; height: 860px; opacity: 0.16"></div>
+          <div class="ring" style="left: -620px; top: -620px; width: 1240px; height: 1240px; opacity: 0.11"></div>
+          <div class="ring" style="left: -840px; top: -840px; width: 1680px; height: 1680px; opacity: 0.07"></div>
+        </div>
+      </section>
+
+      <!-- Scene 1: Hook -->
+      <section id="s1" class="clip" data-start="0" data-duration="2.9" data-track-index="1">
+        <h1 id="hook" class="lead hook display">Spotify “benzer playlist”i kaldırdı.</h1>
+        <p id="answer" class="lead answer display">Geri getirdik.</p>
+      </section>
+
+      <!-- Scene 2: Reveal -->
+      <section id="s2" class="clip" data-start="2.65" data-duration="2.75" data-track-index="2">
+        <h1 id="wm2" class="wordmark display" style="top: 250px">
+          <span class="echo">
+            <span class="line">Echo</span><span class="line">List</span>
+            <span class="ghost g1" aria-hidden="true" data-layout-ignore><span class="line">Echo</span><span class="line">List</span></span>
+            <span class="ghost g2" aria-hidden="true" data-layout-ignore><span class="line">Echo</span><span class="line">List</span></span>
+            <span class="ghost g3" aria-hidden="true" data-layout-ignore><span class="line">Echo</span><span class="line">List</span></span>
+          </span>
+        </h1>
+        <p id="sub2" class="sub" style="top: 780px">Giriş gerekmez.</p>
+      </section>
+
+      <!-- Scenes 3–4: the product in use -->
+      <section id="s34" class="clip" data-start="5.1" data-duration="7.85" data-track-index="3">
+        <h2 id="step1" class="step display">Birkaç şarkı seç.</h2>
+        <h2 id="step2" class="step display">Yankılarını bul.</h2>
+
+        <div id="card">
+          <!-- Picker -->
+          <div id="picker" class="layer">
+            <div class="segmented">
+              <div class="seg-thumb"></div>
+              <div class="seg-label" style="left: 0; color: var(--muted)">Playlist linki</div>
+              <div class="seg-label" style="left: 260px">Şarkılar</div>
+            </div>
+            <div class="field">
+              <div id="ph" class="placeholder">Şarkı ya da sanatçı ara</div>
+              <div id="q1" class="field-text"><span>t</span><span>a</span><span>r</span><span>k</span><span>a</span><span>n</span></div>
+              <div id="q2" class="field-text"><span>d</span><span>u</span><span>d</span><span>u</span></div>
+              <div id="caret" class="caret"></div>
+            </div>
+            <div class="chips" data-layout-allow-overlap data-layout-allow-occlusion>
+              <div id="chip1" class="chip">
+                <span class="cover" style="width: 48px; height: 48px; border-radius: 50%"><svg viewBox="0 0 24 24" fill="none"><circle cx="7" cy="12" r="3" fill="currentColor" /><path d="M12 6.5a7.5 7.5 0 0 1 0 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /><path d="M15.5 3.5a11.5 11.5 0 0 1 0 17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg></span>
+                <span>Şımarık <span class="muted">— Tarkan</span></span>
+              </div>
+              <div id="chip2" class="chip">
+                <span class="cover" style="width: 48px; height: 48px; border-radius: 50%"><svg viewBox="0 0 24 24" fill="none"><circle cx="7" cy="12" r="3" fill="currentColor" /><path d="M12 6.5a7.5 7.5 0 0 1 0 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /><path d="M15.5 3.5a11.5 11.5 0 0 1 0 17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg></span>
+                <span>Dudu <span class="muted">— Tarkan</span></span>
+              </div>
+            </div>
+            <div id="go" class="btn">
+              <div id="go-off" class="btn-label">Önce birkaç şarkı seç</div>
+              <div id="go-on1" class="btn-label">1 şarkının benzerlerini bul</div>
+              <div id="go-on2" class="btn-label">2 şarkının benzerlerini bul</div>
+            </div>
+            <div id="dd1" class="dropdown" data-layout-allow-overlap data-layout-allow-occlusion>
+              <div class="opt active">
+                <span class="cover" style="width: 64px; height: 64px; border-radius: 12px"><svg viewBox="0 0 24 24" fill="none"><circle cx="7" cy="12" r="3" fill="currentColor" /><path d="M12 6.5a7.5 7.5 0 0 1 0 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /><path d="M15.5 3.5a11.5 11.5 0 0 1 0 17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg></span>
+                <span><span class="t-title">Şımarık</span><span class="t-artist">Tarkan</span></span>
+              </div>
+              <div class="opt">
+                <span class="cover" style="width: 64px; height: 64px; border-radius: 12px"><svg viewBox="0 0 24 24" fill="none"><circle cx="7" cy="12" r="3" fill="currentColor" /><path d="M12 6.5a7.5 7.5 0 0 1 0 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /><path d="M15.5 3.5a11.5 11.5 0 0 1 0 17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg></span>
+                <span><span class="t-title">Dudu</span><span class="t-artist">Tarkan</span></span>
+              </div>
+              <div class="opt">
+                <span class="cover" style="width: 64px; height: 64px; border-radius: 12px"><svg viewBox="0 0 24 24" fill="none"><circle cx="7" cy="12" r="3" fill="currentColor" /><path d="M12 6.5a7.5 7.5 0 0 1 0 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /><path d="M15.5 3.5a11.5 11.5 0 0 1 0 17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg></span>
+                <span><span class="t-title">Kuzu Kuzu</span><span class="t-artist">Tarkan</span></span>
+              </div>
+            </div>
+            <div id="dd2" class="dropdown" data-layout-allow-overlap data-layout-allow-occlusion>
+              <div class="opt active">
+                <span class="cover" style="width: 64px; height: 64px; border-radius: 12px"><svg viewBox="0 0 24 24" fill="none"><circle cx="7" cy="12" r="3" fill="currentColor" /><path d="M12 6.5a7.5 7.5 0 0 1 0 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /><path d="M15.5 3.5a11.5 11.5 0 0 1 0 17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg></span>
+                <span><span class="t-title">Dudu</span><span class="t-artist">Tarkan</span></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Loading -->
+          <div id="loading" class="layer">
+            <div class="ripple">
+              <span class="r"></span><span class="r"></span><span class="r"></span>
+              <span class="dot"></span>
+            </div>
+            <p class="loading-text display" style="top: 470px; font-size: 52px; letter-spacing: -0.02em">Şımarık, Dudu dinleniyor…</p>
+            <p class="loading-text" style="top: 548px; font-size: 30px; color: var(--muted)">Benzer şarkılar aranıyor.</p>
+          </div>
+
+          <!-- Results -->
+          <div id="results" class="layer">
+            <h3 class="res-title display">Şımarık, Dudu</h3>
+            <p class="res-sub">2 şarkıya benzeyen 5 şarkı.</p>
+            <div class="rows"></div>
+            <div class="bar">
+              <div id="save" class="btn"><div class="btn-label">Spotify'a kaydet</div></div>
+              <div id="copy" class="btn">
+                <div id="copy-idle" class="btn-label">Linkleri kopyala (5)</div>
+                <div id="copy-done" class="btn-label">
+                  <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3.2 3L13 4.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                  Kopyalandı
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Simulated pointer -->
+          <svg id="cursor" viewBox="0 0 28 28" aria-hidden="true">
+            <path d="M4 3l18 10.5-7.6 1.6L10.2 22z" fill="#161a24" stroke="#ffffff" stroke-width="2" stroke-linejoin="round" />
+          </svg>
+        </div>
+      </section>
+
+      <!-- Scene 5: Outro -->
+      <section id="s5" class="clip" data-start="12.65" data-duration="2.35" data-track-index="4">
+        <h1 id="wm5" class="wordmark display" style="top: 200px">
+          <span class="echo">
+            <span class="line">Echo</span><span class="line">List</span>
+            <span class="ghost g1" aria-hidden="true" data-layout-ignore><span class="line">Echo</span><span class="line">List</span></span>
+            <span class="ghost g2" aria-hidden="true" data-layout-ignore><span class="line">Echo</span><span class="line">List</span></span>
+            <span class="ghost g3" aria-hidden="true" data-layout-ignore><span class="line">Echo</span><span class="line">List</span></span>
+          </span>
+        </h1>
+        <p id="sub5" class="sub" style="top: 730px">Giriş gerekmez.</p>
+        <p id="url5" class="url">spotify-similar-playlist-claude.vercel.app</p>
+      </section>
+
+      <!-- Audio: music bed + sparse, motion-matched SFX -->
+      <audio
+        id="music"
+        src="assets/music/happy-beats-business-moves-vol-12-by-ende-dot-app.mp3"
+        data-start="0"
+        data-duration="15"
+        data-track-index="10"
+        data-automation='{"version":1,"lanes":[{"target":"volume","points":[{"t":0,"v":0},{"t":0.4,"v":0.32},{"t":14.1,"v":0.32},{"t":15,"v":0}]}]}'
+      ></audio>
+      <audio id="sfx-wordmark" src="assets/sfx/impact/impactSoft_medium_001.ogg" data-start="2.73" data-duration="0.18" data-track-index="11" data-volume="0.6"></audio>
+      <audio id="sfx-k1" src="assets/sfx/keyboard/keypress-003.wav" data-start="5.62" data-duration="0.25" data-track-index="12" data-volume="0.4"></audio>
+      <audio id="sfx-k2" src="assets/sfx/keyboard/keypress-007.wav" data-start="5.7" data-duration="0.25" data-track-index="13" data-volume="0.4"></audio>
+      <audio id="sfx-k3" src="assets/sfx/keyboard/keypress-011.wav" data-start="5.78" data-duration="0.25" data-track-index="14" data-volume="0.4"></audio>
+      <audio id="sfx-k4" src="assets/sfx/keyboard/keypress-014.wav" data-start="5.86" data-duration="0.25" data-track-index="15" data-volume="0.4"></audio>
+      <audio id="sfx-k5" src="assets/sfx/keyboard/keypress-018.wav" data-start="5.94" data-duration="0.25" data-track-index="16" data-volume="0.4"></audio>
+      <audio id="sfx-k6" src="assets/sfx/keyboard/keypress-021.wav" data-start="6.02" data-duration="0.25" data-track-index="17" data-volume="0.4"></audio>
+      <audio id="sfx-pick1" src="assets/sfx/ui/click2.ogg" data-start="6.56" data-duration="0.056" data-track-index="18" data-volume="0.6"></audio>
+      <audio id="sfx-k7" src="assets/sfx/keyboard/keypress-024.wav" data-start="7.0" data-duration="0.25" data-track-index="19" data-volume="0.4"></audio>
+      <audio id="sfx-k8" src="assets/sfx/keyboard/keypress-027.wav" data-start="7.08" data-duration="0.25" data-track-index="20" data-volume="0.4"></audio>
+      <audio id="sfx-k9" src="assets/sfx/keyboard/keypress-029.wav" data-start="7.16" data-duration="0.25" data-track-index="21" data-volume="0.4"></audio>
+      <audio id="sfx-k10" src="assets/sfx/keyboard/keypress-031.wav" data-start="7.24" data-duration="0.25" data-track-index="22" data-volume="0.4"></audio>
+      <audio id="sfx-pick2" src="assets/sfx/ui/click2.ogg" data-start="7.64" data-duration="0.056" data-track-index="23" data-volume="0.6"></audio>
+      <audio id="sfx-go" src="assets/sfx/ui/click2.ogg" data-start="8.19" data-duration="0.056" data-track-index="24" data-volume="0.6"></audio>
+      <audio id="sfx-results" src="assets/sfx/interface/drop_001.ogg" data-start="9.27" data-duration="0.11" data-track-index="25" data-volume="0.55"></audio>
+      <audio id="sfx-copy" src="assets/sfx/ui/click2.ogg" data-start="11.6" data-duration="0.056" data-track-index="26" data-volume="0.6"></audio>
+      <audio id="sfx-outro" src="assets/sfx/interface/bong_001.ogg" data-start="13.1" data-duration="0.12" data-track-index="27" data-volume="0.5"></audio>
+    </div>
+
+    <script>
+      (function () {
+        // Real output of the deployed app for the seeds Şımarık + Dudu (artwork replaced by the app's own placeholder).
+        var RESULTS = [
+          ["Kuzu Kuzu", "Tarkan", "Dudu"],
+          ["Aya Benzer", "Mustafa Sandal", "Dudu"],
+          ["Kırmızı", "Hande Yener", "Dudu"],
+          ["Deli Et Beni", "Emel Müftüoğlu", "Şımarık"],
+          ["Komple", "Burak Kut", "Şımarık"],
+        ];
+        var GLYPH =
+          '<svg viewBox="0 0 24 24" fill="none"><circle cx="7" cy="12" r="3" fill="currentColor"/><path d="M12 6.5a7.5 7.5 0 0 1 0 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M15.5 3.5a11.5 11.5 0 0 1 0 17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
+        var rowsHost = document.querySelector("#results .rows");
+        RESULTS.forEach(function (r, i) {
+          var row = document.createElement("div");
+          row.className = "row";
+          row.style.top = 186 + i * 112 + "px";
+          row.innerHTML =
+            '<span class="cover" style="width:80px;height:80px;border-radius:14px">' + GLYPH + "</span>" +
+            '<span><span class="t-title">' + r[0] + '</span><span class="t-artist">' + r[1] + "</span>" +
+            '<span class="tag">' + GLYPH + r[2] + " yankısı</span></span>";
+          rowsHost.appendChild(row);
+        });
+
+        var EASE_OUT = "power4.out"; // ≈ the app's cubic-bezier(0.23, 1, 0.32, 1)
+        var MOVE = "power3.inOut";
+
+        function build() {
+          var tl = gsap.timeline({ paused: true });
+
+          // ── Background ambience (finite, whole video) ──
+          tl.fromTo("#bg-dots", { y: 0 }, { y: -32, duration: 15, ease: "none" }, 0);
+          tl.fromTo("#bg-rings", { scale: 0.94, rotation: 0 }, { scale: 1.04, rotation: 6, duration: 15, ease: "none" }, 0);
+          // Audio-reactive: the cobalt glow breathes with the music's energy (pre-extracted, sampled per frame).
+          var A = window.AUDIO_DATA;
+          for (var f = 0; f < A.rms.length; f++) {
+            var e = A.rms[f] * 0.6 + A.bass[f] * 0.4;
+            tl.set("#bg-glow", { opacity: 0.45 + e * 0.45, scale: 0.96 + e * 0.08 }, f / A.fps);
+          }
+
+          // ── Scene 1: Hook ──
+          tl.fromTo("#hook", { y: 70, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, ease: EASE_OUT }, 0.12);
+          tl.fromTo("#answer", { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: EASE_OUT }, 1.35);
+          tl.to(["#hook", "#answer"], { y: -30, opacity: 0, duration: 0.3, ease: "power2.in" }, 2.5);
+
+          // ── Scene 2: Reveal (wordmark lands; echoes slide out on the beat) ──
+          tl.fromTo("#wm2", { y: 60, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, ease: EASE_OUT }, 2.72);
+          // beat-locked: 3.27s (echoes)
+          [1, 2, 3].forEach(function (i) {
+            tl.fromTo(
+              "#wm2 .g" + i,
+              { x: 0, opacity: 0 },
+              { x: 300 * 0.11 * i, opacity: 0.8 - i * 0.22, duration: 0.7, ease: EASE_OUT },
+              3.27 + (i - 1) * 0.06,
+            );
+          });
+          tl.fromTo("#sub2", { y: 24, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: EASE_OUT }, 3.75);
+          tl.to(["#wm2", "#sub2"], { x: -60, opacity: 0, duration: 0.35, ease: "power2.in" }, 5.0);
+
+          // ── Scene 3: Pick songs ──
+          tl.fromTo("#step1", { x: -40, opacity: 0 }, { x: 0, opacity: 1, duration: 0.55, ease: EASE_OUT }, 5.15);
+          tl.fromTo("#card", { y: 60, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, ease: EASE_OUT }, 5.2);
+
+          // Typing. Caret positions are measured once at build time (fonts are ready).
+          function typeInto(sel, t0, step) {
+            var spans = document.querySelectorAll(sel + " span");
+            var base = document.querySelector(sel).offsetLeft;
+            spans.forEach(function (s, i) {
+              tl.set(s, { opacity: 1 }, t0 + i * step);
+              tl.set("#caret", { x: s.offsetLeft + s.offsetWidth + 2 }, t0 + i * step);
+            });
+            return spans;
+          }
+          tl.set("#caret", { opacity: 1, x: 0 }, 5.55);
+          tl.set("#ph", { opacity: 0 }, 5.62);
+          var q1 = typeInto("#q1", 5.62, 0.08);
+
+          // First dropdown, pick Şımarık
+          tl.fromTo("#dd1", { opacity: 0, scale: 0.98, y: -6 }, { opacity: 1, scale: 1, y: 0, duration: 0.18, ease: EASE_OUT }, 6.12);
+          tl.set("#cursor", { x: 720, y: 700 }, 6.1);
+          tl.to("#cursor", { opacity: 1, duration: 0.15 }, 6.12);
+          tl.to("#cursor", { x: 330, y: 330, duration: 0.36, ease: MOVE }, 6.14);
+          tl.to("#cursor", { scale: 0.86, duration: 0.06, ease: "power2.out" }, 6.53);
+          tl.to("#cursor", { scale: 1, duration: 0.12, ease: "power2.out" }, 6.6);
+          tl.set("#dd1", { opacity: 0 }, 6.58); // selection closes the dropdown and clears the query
+          tl.set(q1, { opacity: 0 }, 6.58);
+          tl.set("#caret", { x: 0 }, 6.58);
+          tl.set("#ph", { opacity: 1 }, 6.58);
+          tl.fromTo("#chip1", { opacity: 0, scale: 0.96 }, { opacity: 1, scale: 1, duration: 0.18, ease: EASE_OUT }, 6.58);
+          tl.set("#go-off", { opacity: 0 }, 6.58);
+          tl.set("#go-on1", { opacity: 1 }, 6.58);
+
+          // Second search, pick Dudu
+          tl.to("#cursor", { x: 560, y: 240, duration: 0.4, ease: MOVE }, 6.7);
+          tl.set("#ph", { opacity: 0 }, 7.0);
+          var q2 = typeInto("#q2", 7.0, 0.08);
+          tl.fromTo("#dd2", { opacity: 0, scale: 0.98, y: -6 }, { opacity: 1, scale: 1, y: 0, duration: 0.18, ease: EASE_OUT }, 7.32);
+          tl.to("#cursor", { x: 330, y: 330, duration: 0.28, ease: MOVE }, 7.33);
+          tl.to("#cursor", { scale: 0.86, duration: 0.06, ease: "power2.out" }, 7.61);
+          tl.to("#cursor", { scale: 1, duration: 0.12, ease: "power2.out" }, 7.68);
+          tl.set("#dd2", { opacity: 0 }, 7.66);
+          tl.set(q2, { opacity: 0 }, 7.66);
+          tl.set("#caret", { x: 0 }, 7.66);
+          tl.set("#ph", { opacity: 1 }, 7.66);
+          tl.fromTo("#chip2", { opacity: 0, scale: 0.96 }, { opacity: 1, scale: 1, duration: 0.18, ease: EASE_OUT }, 7.66);
+          tl.set("#go-on1", { opacity: 0 }, 7.66);
+          tl.set("#go-on2", { opacity: 1 }, 7.66);
+
+          // Press the button (beat 8.19)
+          tl.to("#cursor", { x: 590, y: 446, duration: 0.4, ease: MOVE }, 7.74);
+          tl.to(["#cursor", "#go"], { scale: 0.96, duration: 0.07, ease: "power2.out" }, 8.16);
+          tl.to(["#cursor", "#go"], { scale: 1, duration: 0.14, ease: "power2.out" }, 8.24);
+          tl.to("#cursor", { opacity: 0, duration: 0.15 }, 8.3);
+
+          // ── Scene 4: Echoes ──
+          tl.to("#picker", { opacity: 0, duration: 0.15, ease: "power2.out" }, 8.3);
+          tl.to("#loading", { opacity: 1, duration: 0.15, ease: "power2.out" }, 8.36);
+          tl.set("#caret", { opacity: 0 }, 8.4);
+          document.querySelectorAll(".ripple .r").forEach(function (r, i) {
+            tl.fromTo(r, { scale: 0.2, opacity: 0.9 }, { scale: 1, opacity: 0, duration: 0.9, ease: "power2.out" }, 8.36 + i * 0.25);
+          });
+          // beat-locked: 8.74s (strong cue) — the step line turns from "pick" to "find"
+          tl.to("#step1", { y: -30, opacity: 0, duration: 0.2, ease: "power2.in" }, 8.55);
+          tl.fromTo("#step2", { y: 30, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: EASE_OUT }, 8.74);
+          tl.to("#loading", { opacity: 0, duration: 0.15 }, 9.14);
+          // beat-locked: 9.29s (strong cue) — results land
+          tl.set("#results", { opacity: 1 }, 9.27);
+          tl.fromTo("#results .res-title", { y: 16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease: EASE_OUT }, 9.27);
+          tl.fromTo("#results .res-sub", { y: 12, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease: EASE_OUT }, 9.33);
+          // Fast cascade, then the full set holds ~2.7s for reading.
+          tl.fromTo(
+            "#results .row",
+            { y: 10, opacity: 0 },
+            { y: 0, opacity: 1, duration: 0.32, ease: EASE_OUT, stagger: 0.07 },
+            9.4,
+          );
+          tl.fromTo("#results .bar", { opacity: 0 }, { opacity: 1, duration: 0.3, ease: EASE_OUT }, 9.8);
+
+          // Copy the links
+          tl.set("#cursor", { x: 860, y: 640 }, 10.9);
+          tl.to("#cursor", { opacity: 1, duration: 0.15 }, 10.95);
+          tl.to("#cursor", { x: 812, y: 840, duration: 0.5, ease: MOVE }, 11.0);
+          tl.to(["#cursor", "#copy"], { scale: 0.96, duration: 0.07, ease: "power2.out" }, 11.57);
+          tl.to(["#cursor", "#copy"], { scale: 1, duration: 0.14, ease: "power2.out" }, 11.65);
+          tl.set("#copy-idle", { opacity: 0 }, 11.6);
+          tl.fromTo("#copy-done", { opacity: 0, scale: 0.96 }, { opacity: 1, scale: 1, duration: 0.16, ease: EASE_OUT }, 11.6);
+          tl.to("#cursor", { opacity: 0, duration: 0.2 }, 12.1);
+
+          tl.to("#card", { y: 30, opacity: 0, duration: 0.35, ease: "power2.in" }, 12.45);
+          tl.to("#step2", { x: -40, opacity: 0, duration: 0.3, ease: "power2.in" }, 12.45);
+
+          // ── Scene 5: Outro ──
+          tl.fromTo("#wm5", { y: 60, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, ease: EASE_OUT }, 12.8);
+          // beat-locked: 13.11s (strong cue)
+          [1, 2, 3].forEach(function (i) {
+            tl.fromTo(
+              "#wm5 .g" + i,
+              { x: 0, opacity: 0 },
+              { x: 300 * 0.11 * i, opacity: 0.8 - i * 0.22, duration: 0.7, ease: EASE_OUT },
+              13.11 + (i - 1) * 0.06,
+            );
+          });
+          tl.fromTo("#sub5", { y: 24, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: EASE_OUT }, 13.4);
+          tl.fromTo("#url5", { y: 16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: EASE_OUT }, 13.6);
+
+          window.__timelines["echo-brag"] = tl;
+        }
+
+        document.fonts.ready.then(build);
+      })();
+    </script>
+  </body>
+</html>

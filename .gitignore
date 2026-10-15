@@ -40,3 +40,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# brag video sources: the music bed's license isn't verified for redistribution
+# (it ships inside the rendered videos only), and Hyperframes' local artifacts.
+brag-output/*/assets/music/
+brag-output/*/.hyperframes/

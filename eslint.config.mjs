@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Video sources (Hyperframes compositions, vendored GSAP), not app code.
+    "brag-output/**",
   ]),
 ]);
 
