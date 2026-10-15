@@ -40,11 +40,7 @@ export async function fetchEmbedPlaylist(id: string): Promise<EmbedPlaylist> {
   });
   const parsed = res.ok ? parseEmbedHtml(await res.text()) : null;
   if (!parsed || !parsed.tracks.length) {
-    throw new UserFacingError(
-      res.status === 404
-        ? "Bu playlist bulunamadı. Linkin doğru ve playlist'in herkese açık olduğundan emin ol."
-        : "Bu playlist şu an okunamadı. Gizli olabilir; 'Şarkılar' sekmesinden birkaç şarkı seçerek dene.",
-    );
+    throw new UserFacingError(res.status === 404 ? "playlistNotFound" : "playlistUnreadable");
   }
   return parsed;
 }
@@ -83,7 +79,7 @@ export function parseProfileHtml(html: string): Profile | null {
     playlists.push({ id, name: p.data.name, image: p.data.images?.items?.[0]?.sources?.[0]?.url ?? null });
   }
   return {
-    name: user.name ?? "Bu kullanıcı",
+    name: user.name ?? "",
     playlists,
     total: Math.max(user.publicPlaylistsV2?.totalCount ?? 0, playlists.length),
   };
@@ -93,13 +89,13 @@ export async function fetchProfile(userId: string): Promise<Profile> {
   const res = await fetch(`https://open.spotify.com/user/${encodeURIComponent(userId)}`, {
     headers: { "User-Agent": "Mozilla/5.0 (compatible; echo-list/0.1)", "Accept-Language": "en" },
   });
-  if (res.status === 404) throw new UserFacingError("Bu Spotify profili bulunamadı. Linki kontrol et.");
+  if (res.status === 404) throw new UserFacingError("profileNotFound");
   const profile = res.ok ? parseProfileHtml(await res.text()) : null;
   if (!profile) {
-    throw new UserFacingError("Bu profil şu an okunamadı. Profilden bir playlist açıp onun linkini yapıştırmayı dene.");
+    throw new UserFacingError("profileUnreadable");
   }
   if (!profile.playlists.length) {
-    throw new UserFacingError(`${profile.name} profilinde herkese açık playlist yok.`);
+    throw new UserFacingError("profileNoPlaylists", [profile.name]);
   }
   return profile;
 }

@@ -5,14 +5,15 @@ import { LegalPage } from "../legal-page";
 export const metadata: Metadata = {
   title: "Gizlilik ve KVKK — Echo List",
   description: "Echo List'in hangi verileri neden işlediği ve haklarınız.",
+  alternates: { languages: { en: "/privacy", tr: "/gizlilik" } },
 };
 
 export default function PrivacyPage() {
-  const name = LEGAL.controllerName || PLACEHOLDER;
+  const name = LEGAL.controllerName || PLACEHOLDER.tr;
   const email = LEGAL.contactEmail;
 
   return (
-    <LegalPage title="Gizlilik Politikası ve KVKK Aydınlatma Metni">
+    <LegalPage lang="tr" otherLangHref="/privacy" title="Gizlilik Politikası ve KVKK Aydınlatma Metni">
       <p>
         Bu metin, Echo List&apos;i kullandığınızda hangi verilerin işlendiğini, neden işlendiğini ve 6698 sayılı Kişisel
         Verilerin Korunması Kanunu (KVKK) kapsamındaki haklarınızı açıklar. Kısaca: Echo List bir veritabanı tutmaz, reklam
@@ -22,7 +23,7 @@ export default function PrivacyPage() {
       <h2>Veri sorumlusu</h2>
       <p>
         Veri sorumlusu: {name}. İletişim:{" "}
-        {email ? <a href={`mailto:${email}`}>{email}</a> : PLACEHOLDER}.
+        {email ? <a href={`mailto:${email}`}>{email}</a> : PLACEHOLDER.tr}.
       </p>
 
       <h2>Giriş yapmadan kullanırsanız</h2>
@@ -148,7 +149,7 @@ export default function PrivacyPage() {
       </ul>
       <p>
         Bu haklarınızı kullanmak için bize{" "}
-        {email ? <a href={`mailto:${email}`}>{email}</a> : `e-posta ile (adres ${PLACEHOLDER})`} yazabilirsiniz.
+        {email ? <a href={`mailto:${email}`}>{email}</a> : `e-posta ile (adres ${PLACEHOLDER.tr})`} yazabilirsiniz.
         Başvurunuzu en geç 30 gün içinde ücretsiz olarak yanıtlarız. Yanıtımızı yeterli bulmazsanız Kişisel Verileri Koruma
         Kurulu&apos;na şikâyette bulunabilirsiniz.
       </p>

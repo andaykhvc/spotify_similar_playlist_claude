@@ -11,9 +11,9 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const name = String(body.name ?? "").trim().slice(0, 100);
     const uris: unknown[] = Array.isArray(body.uris) ? body.uris : [];
-    if (!name) throw new UserFacingError("Playlist'e bir isim ver.");
+    if (!name) throw new UserFacingError("nameMissing");
     if (!uris.length || uris.length > 100 || !uris.every((u) => typeof u === "string" && TRACK_URI.test(u))) {
-      throw new UserFacingError("Kaydedilecek şarkı listesi geçersiz.");
+      throw new UserFacingError("saveListInvalid");
     }
     const description = String(body.description ?? "").slice(0, 300);
 

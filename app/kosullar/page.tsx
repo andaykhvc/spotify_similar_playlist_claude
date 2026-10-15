@@ -6,13 +6,14 @@ import { LegalPage } from "../legal-page";
 export const metadata: Metadata = {
   title: "Kullanım Koşulları — Echo List",
   description: "Echo List'i kullanma koşulları.",
+  alternates: { languages: { en: "/terms", tr: "/kosullar" } },
 };
 
 export default function TermsPage() {
   const email = LEGAL.contactEmail;
 
   return (
-    <LegalPage title="Kullanım Koşulları">
+    <LegalPage lang="tr" otherLangHref="/terms" title="Kullanım Koşulları">
       <p>
         Echo List&apos;i kullanarak bu koşulları kabul etmiş olursunuz. Kabul etmiyorsanız lütfen siteyi kullanmayın.
       </p>
@@ -79,7 +80,7 @@ export default function TermsPage() {
       <p>Bu koşullar Türkiye Cumhuriyeti hukukuna tabidir.</p>
 
       <h2>İletişim</h2>
-      <p>Sorularınız için: {email ? <a href={`mailto:${email}`}>{email}</a> : PLACEHOLDER}.</p>
+      <p>Sorularınız için: {email ? <a href={`mailto:${email}`}>{email}</a> : PLACEHOLDER.tr}.</p>
     </LegalPage>
   );
 }

@@ -13,13 +13,13 @@ const MAX_SEED_SONGS = 10;
 
 function parseSeeds(raw: unknown): SourceTrack[] {
   if (!Array.isArray(raw) || !raw.length || raw.length > MAX_SEED_SONGS) {
-    throw new UserFacingError(`1 ile ${MAX_SEED_SONGS} arasında şarkı seç.`);
+    throw new UserFacingError("seedCount", [MAX_SEED_SONGS]);
   }
   return raw.map((s) => {
     const uri = String(s?.uri ?? "");
     const title = String(s?.title ?? "").slice(0, 200);
     const artists = Array.isArray(s?.artists) ? s.artists.slice(0, 10).map((a: unknown) => String(a).slice(0, 200)) : [];
-    if (!TRACK_URI.test(uri) || !title || !artists.length) throw new UserFacingError("Seçilen şarkılar geçersiz.");
+    if (!TRACK_URI.test(uri) || !title || !artists.length) throw new UserFacingError("seedsInvalid");
     return { uri, title, artists };
   });
 }

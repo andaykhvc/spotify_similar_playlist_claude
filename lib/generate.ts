@@ -104,7 +104,7 @@ async function findOnSpotify(token: string, c: Candidate): Promise<SpotifyTrack 
 
 /** `token` is used only for Spotify search, so an app (client-credentials) token works too. */
 export async function generateSimilar(token: string, source: Source, size: number): Promise<GenerateResult> {
-  if (!source.tracks.length) throw new UserFacingError("Bu playlist'te benzerini bulabileceğim şarkı yok.");
+  if (!source.tracks.length) throw new UserFacingError("emptyPlaylist");
 
   const refs = source.tracks.map((t) => ({ artist: t.artists[0] ?? "", title: t.title }));
   const exclude = new Set(source.tracks.flatMap((t) => t.artists.map((a) => trackKey(a, t.title))));
@@ -116,7 +116,7 @@ export async function generateSimilar(token: string, source: Source, size: numbe
     (r): r is SimilarResult => r !== null,
   );
   if (!results.length && seeds.length) {
-    throw new UserFacingError("Last.fm'e şu an ulaşılamıyor, biraz sonra tekrar dene.", 503);
+    throw new UserFacingError("lastfmDown", [], 503);
   }
 
   // Few seeds (song mode) need a looser per-artist cap or the list stays short.

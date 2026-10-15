@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Profile } from "@/lib/embed";
 import type { GenerateResult, SuggestedTrack } from "@/lib/generate";
+import { errorText, type ErrorParam } from "@/lib/i18n";
 import { parseSpotifyLink } from "@/lib/normalize";
+import { LangSwitch, useLang, useT } from "./i18n-client";
 import { SiteFooter } from "./site-footer";
 
 type User = { id: string; name: string };
@@ -24,12 +26,15 @@ type GenerateInput = { playlist: string } | { seeds: SearchTrack[] };
 type Draft = { tab: 0 | 1; link: string; seeds: SearchTrack[]; profile: Profile | null };
 type SetDraft = React.Dispatch<React.SetStateAction<Draft>>;
 
+/** An error to show, kept as a code so it re-renders when the language changes. */
+type AppError = { code: string; params?: ErrorParam[] };
+
+// /api/auth/callback redirects back with ?error=<reason>.
 const LOGIN_ERRORS: Record<string, string> = {
-  denied: "Spotify izni verilmedi. Kaydetmek için tekrar bağlanabilirsin.",
-  state: "Bağlantı yarıda kaldı. Tekrar bağlan.",
-  spotify: "Spotify bağlantısı başarısız oldu. Tekrar dene.",
-  login:
-    "Spotify bağlantısı reddedildi. Uygulama geliştirme modundayken sadece Spotify Dashboard → User Management'a eklenen hesaplar bağlanabilir.",
+  denied: "loginDenied",
+  state: "loginState",
+  spotify: "loginFailed",
+  login: "loginRejected",
 };
 
 // Results survive the Spotify login round-trip so an anonymous user can save what they just generated.
@@ -52,20 +57,27 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
     headers: init?.body ? { "Content-Type": "application/json" } : undefined,
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw Object.assign(new Error(data.error ?? "Bir şeyler ters gitti, tekrar dene."), { auth: !!data.auth });
+  if (!res.ok) {
+    throw Object.assign(new Error(String(data.error ?? "generic")), {
+      code: String(data.error ?? "generic"),
+      params: Array.isArray(data.params) ? data.params : [],
+      auth: !!data.auth,
+    });
+  }
   return data as T;
 }
 
 type Phase =
   | { kind: "pick" }
-  | { kind: "loading"; label: string }
+  | { kind: "loading"; label: string | null }
   | { kind: "results"; result: GenerateResult; removed?: string[]; name?: string }
   | { kind: "saved"; url: string; name: string; count: number };
 
 export function SimilarApp() {
   const [user, setUser] = useState<User | null | undefined>(undefined);
   const [phase, setPhase] = useState<Phase>({ kind: "pick" });
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<AppError | null>(null);
+  const lang = useLang();
   const [size, setSize] = useState(30);
   // The hero echo is a first-impression moment: once per page load, never on returns.
   const [heroSeen, setHeroSeen] = useState(false);
@@ -86,21 +98,22 @@ export function SimilarApp() {
         if (pending) setPhase({ kind: "results", ...pending });
       })
       .catch(() => setUser(null))
-      .finally(() => setError(err ? (LOGIN_ERRORS[err] ?? LOGIN_ERRORS.spotify) : null));
+      .finally(() => setError(err ? { code: LOGIN_ERRORS[err] ?? LOGIN_ERRORS.spotify } : null));
   }, []);
 
   const fail = (e: unknown) => {
-    const err = e as Error & { auth?: boolean };
+    const err = e as Error & { auth?: boolean; code?: string; params?: ErrorParam[] };
     if (err.auth) setUser(null);
-    setError(err.message);
+    setError({ code: err.code ?? "generic", params: err.params });
   };
+  const errorMessage = error ? errorText(lang, error.code, error.params) : null;
 
   async function generate(input: GenerateInput) {
     setHeroSeen(true);
     setError(null);
     setPhase({
       kind: "loading",
-      label: "seeds" in input ? input.seeds.map((s) => s.title).slice(0, 2).join(", ") : "playlist",
+      label: "seeds" in input ? input.seeds.map((s) => s.title).slice(0, 2).join(", ") : null,
     });
     window.scrollTo({ top: 0 });
     try {
@@ -110,7 +123,7 @@ export function SimilarApp() {
           : { size, playlist: input.playlist };
       const result = await api<GenerateResult>("/api/similar", { method: "POST", body: JSON.stringify(body) });
       if (!result.tracks.length) {
-        setError("Bu kaynak için benzer şarkı bulunamadı. Daha bilinen birkaç şarkıyla dene.");
+        setError({ code: "noResults" });
         setPhase({ kind: "pick" });
         return;
       }
@@ -137,7 +150,7 @@ export function SimilarApp() {
         onBack={() => setPhase({ kind: "pick" })}
         onSaved={(url, name, count) => setPhase({ kind: "saved", url, name, count })}
         onError={fail}
-        error={error}
+        error={errorMessage}
       />
     );
   } else if (phase.kind === "saved") {
@@ -148,7 +161,7 @@ export function SimilarApp() {
         user={user}
         size={size}
         setSize={setSize}
-        error={error}
+        error={errorMessage}
         onGenerate={generate}
         onError={fail}
         animateHero={!heroSeen}
@@ -162,10 +175,13 @@ export function SimilarApp() {
     <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 pb-16 sm:px-8">
       <header className="flex h-16 items-center justify-between gap-4 sm:h-20">
         {phase.kind === "pick" ? <span /> : <SmallMark />}
-        <Account user={user} onLogout={() => setUser(null)} />
+        <div className="flex min-w-0 items-center gap-2">
+          <Account user={user} onLogout={() => setUser(null)} />
+          <LangSwitch />
+        </div>
       </header>
       <main className="flex flex-1 flex-col">{content}</main>
-      {user !== undefined && phase.kind !== "loading" && <SiteFooter />}
+      {user !== undefined && phase.kind !== "loading" && <SiteFooter lang={lang} />}
     </div>
   );
 }
@@ -190,11 +206,12 @@ function EchoGlyph({ className }: { className?: string }) {
 }
 
 function Account({ user, onLogout }: { user: User | null | undefined; onLogout: () => void }) {
+  const t = useT();
   if (user === undefined) return null;
   if (!user) {
     return (
       <a href="/api/auth/login" className="press rounded-full px-3 py-1.5 text-sm text-muted hover:text-ink">
-        Spotify ile bağlan
+        {t.connect}
       </a>
     );
   }
@@ -208,7 +225,7 @@ function Account({ user, onLogout }: { user: User | null | undefined; onLogout: 
           onLogout();
         }}
       >
-        Çıkış yap
+        {t.logout}
       </button>
     </div>
   );
@@ -266,6 +283,7 @@ function Picker({
   draft: Draft;
   setDraft: SetDraft;
 }) {
+  const t = useT();
   const { tab, link, profile } = draft;
   const [openingProfile, setOpeningProfile] = useState(false);
 
@@ -299,14 +317,14 @@ function Picker({
       <div className="pt-6 pb-10 sm:pt-10 sm:pb-14">
         <Wordmark animate={animateHero} />
         <p className="mt-7 max-w-[34ch] text-lg leading-snug text-muted text-pretty sm:text-xl">
-          Sevdiğin bir playlist&apos;e ya da birkaç şarkıya benzeyen yeni şarkılar bul. Giriş gerekmez.
+          {t.tagline}
         </p>
       </div>
 
       <div className="flex flex-col gap-4">
-        <div role="tablist" aria-label="Kaynak" className="segmented w-full max-w-sm text-sm font-medium" data-active={tab}>
+        <div role="tablist" aria-label={t.sourceLabel} className="segmented w-full max-w-sm text-sm font-medium" data-active={tab}>
           <span className="segmented-thumb" aria-hidden />
-          {["Playlist linki", "Şarkılar"].map((label, i) => (
+          {[t.tabLink, t.tabSongs].map((label, i) => (
             <button
               key={label}
               role="tab"
@@ -330,14 +348,14 @@ function Picker({
             <input
               value={link}
               onChange={(e) => setDraft((d) => ({ ...d, link: e.target.value }))}
-              placeholder="Playlist ya da profil linki"
-              aria-label="Spotify playlist ya da profil linki"
+              placeholder={t.linkPlaceholder}
+              aria-label={t.linkLabel}
               inputMode="url"
               autoComplete="off"
               className="field min-w-0 sm:flex-1"
             />
             <PrimaryButton disabled={!link.trim() || openingProfile}>
-              {openingProfile ? "Profil açılıyor…" : "Benzerlerini bul"}
+              {openingProfile ? t.openingProfile : t.findSimilar}
             </PrimaryButton>
           </form>
         ) : (
@@ -351,7 +369,7 @@ function Picker({
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
           <label className="flex items-center gap-3">
-            Kaç şarkı
+            {t.howMany}
             <input
               type="range"
               min={10}
@@ -363,12 +381,7 @@ function Picker({
             />
             <span className="w-7 tabular-nums text-ink">{size}</span>
           </label>
-          {tab === 0 && (
-            <span>
-              Herkese açık her playlist olur; çok uzunsa ilk 100 şarkısına bakılır. Profil linki verirsen playlist&apos;lerini
-              listeleriz.
-            </span>
-          )}
+          {tab === 0 && <span>{t.linkHelp}</span>}
         </div>
 
         {error && <ErrorNote>{error}</ErrorNote>}
@@ -377,15 +390,15 @@ function Picker({
       {tab === 0 && profile && (
         <div id="profile-playlists" className="mt-16 flex scroll-mt-6 flex-col gap-5">
           <div className="flex flex-col gap-1">
-            <h2 className="display text-2xl leading-tight tracking-[-0.02em]">{profile.name} profilindeki playlist&apos;ler</h2>
+            <h2 className="display text-2xl leading-tight tracking-[-0.02em]">
+              {t.profileTitle(profile.name || t.thisUser)}
+            </h2>
             {profile.total > profile.playlists.length && (
-              <p className="text-sm text-muted">
-                Profilde {profile.total} herkese açık playlist var; Spotify ilk {profile.playlists.length} tanesini gösteriyor.
-              </p>
+              <p className="text-sm text-muted">{t.profileShowing(profile.total, profile.playlists.length)}</p>
             )}
           </div>
           <PlaylistGrid
-            playlists={profile.playlists.map((p) => ({ ...p, total: null, owner: profile.name, fullAccess: false }))}
+            playlists={profile.playlists.map((p) => ({ ...p, total: null, owner: profile.name || t.thisUser, fullAccess: false }))}
             onPick={(id) => onGenerate({ playlist: id })}
           />
         </div>
@@ -409,6 +422,7 @@ function SongPicker({
   onGenerate: (seeds: SearchTrack[]) => void;
   onError: (e: unknown) => void;
 }) {
+  const t = useT();
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<SearchTrack[]>([]);
   const [active, setActive] = useState(0);
@@ -432,8 +446,8 @@ function SongPicker({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
 
-  const add = (t: SearchTrack) => {
-    setSelected((s) => (s.some((x) => x.uri === t.uri) || s.length >= MAX_SEEDS ? s : [...s, t]));
+  const add = (track: SearchTrack) => {
+    setSelected((list) => (list.some((x) => x.uri === track.uri) || list.length >= MAX_SEEDS ? list : [...list, track]));
     setQuery("");
     setHits([]);
     inputRef.current?.focus();
@@ -469,8 +483,8 @@ function SongPicker({
           aria-expanded={open}
           aria-controls="song-results"
           aria-activedescendant={open ? `song-${active}` : undefined}
-          aria-label="Şarkı ara"
-          placeholder={full ? `En fazla ${MAX_SEEDS} şarkı seçebilirsin` : "Şarkı ya da sanatçı ara"}
+          aria-label={t.searchLabel}
+          placeholder={full ? t.maxSeeds(MAX_SEEDS) : t.searchPlaceholder}
           autoComplete="off"
           className="field w-full disabled:opacity-50"
         />
@@ -480,17 +494,17 @@ function SongPicker({
             role="listbox"
             className="popover material absolute inset-x-0 top-full z-20 mt-2 max-h-[22rem] overflow-y-auto rounded-2xl p-1.5"
           >
-            {hits.map((t, i) => (
-              <li key={t.uri} id={`song-${i}`} role="option" aria-selected={i === active}>
+            {hits.map((h, i) => (
+              <li key={h.uri} id={`song-${i}`} role="option" aria-selected={i === active}>
                 <button
                   onMouseEnter={() => setActive(i)}
-                  onClick={() => add(t)}
+                  onClick={() => add(h)}
                   className={`flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left ${i === active ? "bg-ink/[0.06]" : ""}`}
                 >
-                  <Cover src={t.image} className="h-10 w-10 shrink-0 rounded-md" />
+                  <Cover src={h.image} className="h-10 w-10 shrink-0 rounded-md" />
                   <span className="min-w-0">
-                    <span className="block truncate font-medium">{t.title}</span>
-                    <span className="block truncate text-sm text-muted">{t.artists.join(", ")}</span>
+                    <span className="block truncate font-medium">{h.title}</span>
+                    <span className="block truncate text-sm text-muted">{h.artists.join(", ")}</span>
                   </span>
                 </button>
               </li>
@@ -500,16 +514,16 @@ function SongPicker({
       </div>
 
       {selected.length > 0 && (
-        <ul className="flex flex-wrap gap-2" aria-label="Seçilen şarkılar">
-          {selected.map((t) => (
-            <li key={t.uri} className="chip-in flex max-w-full items-center gap-2 rounded-full bg-raised py-1 pl-1 pr-1 text-sm shadow-[0_1px_2px_rgb(22_26_36/0.08)]">
-              <Cover src={t.image} className="h-7 w-7 shrink-0 rounded-full" />
+        <ul className="flex flex-wrap gap-2" aria-label={t.pickedSongs}>
+          {selected.map((s) => (
+            <li key={s.uri} className="chip-in flex max-w-full items-center gap-2 rounded-full bg-raised py-1 pl-1 pr-1 text-sm shadow-[0_1px_2px_rgb(22_26_36/0.08)]">
+              <Cover src={s.image} className="h-7 w-7 shrink-0 rounded-full" />
               <span className="truncate">
-                {t.title} <span className="text-muted">— {t.artists[0]}</span>
+                {s.title} <span className="text-muted">— {s.artists[0]}</span>
               </span>
               <button
-                aria-label={`${t.title} şarkısını çıkar`}
-                onClick={() => setSelected((s) => s.filter((x) => x.uri !== t.uri))}
+                aria-label={t.removeSong(s.title)}
+                onClick={() => setSelected((list) => list.filter((x) => x.uri !== s.uri))}
                 className="press grid h-7 w-7 shrink-0 place-items-center rounded-full text-muted hover:bg-surface hover:text-ink"
               >
                 <svg viewBox="0 0 12 12" className="h-3 w-3" aria-hidden>
@@ -522,13 +536,14 @@ function SongPicker({
       )}
 
       <PrimaryButton className="w-full sm:w-fit" disabled={!selected.length} onClick={() => onGenerate(selected)}>
-        {selected.length ? `${selected.length} şarkının benzerlerini bul` : "Önce birkaç şarkı seç"}
+        {selected.length ? t.findForSongs(selected.length) : t.pickFirst}
       </PrimaryButton>
     </div>
   );
 }
 
 function MyPlaylists({ onPick, onError }: { onPick: (id: string) => void; onError: (e: unknown) => void }) {
+  const t = useT();
   const [playlists, setPlaylists] = useState<Playlist[] | null>(null);
 
   useEffect(() => {
@@ -540,11 +555,11 @@ function MyPlaylists({ onPick, onError }: { onPick: (id: string) => void; onErro
 
   return (
     <div className="mt-16 flex flex-col gap-5">
-      <h2 className="display text-2xl leading-tight tracking-[-0.02em]">Playlist&apos;lerin</h2>
+      <h2 className="display text-2xl leading-tight tracking-[-0.02em]">{t.yourPlaylists}</h2>
       {playlists === null ? (
-        <p className="text-muted">Playlist&apos;lerin yükleniyor…</p>
+        <p className="text-muted">{t.loadingPlaylists}</p>
       ) : playlists.length === 0 ? (
-        <p className="text-muted">Spotify hesabında henüz playlist yok. Yukarıdan bir link ya da şarkı ile başla.</p>
+        <p className="text-muted">{t.noPlaylists}</p>
       ) : (
         <PlaylistGrid playlists={playlists} onPick={onPick} />
       )}
@@ -553,13 +568,14 @@ function MyPlaylists({ onPick, onError }: { onPick: (id: string) => void; onErro
 }
 
 function PlaylistGrid({ playlists, onPick }: { playlists: Playlist[]; onPick: (id: string) => void }) {
+  const t = useT();
   return (
     <ul className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3">
       {playlists.map((p, i) => (
         <li key={p.id} className="arrive" style={{ "--i": i } as React.CSSProperties}>
           <button
             onClick={() => onPick(p.id)}
-            title={p.fullAccess ? undefined : "Senin olmadığı için en fazla ilk 100 şarkısına bakılır"}
+            title={p.fullAccess ? undefined : t.notYours}
             className="press group flex w-full flex-col gap-2.5 text-left"
           >
             <Cover
@@ -569,7 +585,7 @@ function PlaylistGrid({ playlists, onPick }: { playlists: Playlist[]; onPick: (i
             <span className="min-w-0">
               <span className="block truncate font-medium">{p.name}</span>
               <span className="block truncate text-sm text-muted">
-                {p.total !== null ? `${p.total} şarkı, ` : ""}
+                {p.total !== null ? `${t.songCount(p.total)}, ` : ""}
                 {p.owner}
               </span>
             </span>
@@ -580,7 +596,8 @@ function PlaylistGrid({ playlists, onPick }: { playlists: Playlist[]; onPick: (i
   );
 }
 
-function Loading({ label }: { label: string }) {
+function Loading({ label }: { label: string | null }) {
+  const t = useT();
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-8 pb-24 text-center" role="status" aria-live="polite">
       <div className="ripple" aria-hidden>
@@ -590,29 +607,30 @@ function Loading({ label }: { label: string }) {
       </div>
       <div className="flex flex-col gap-1">
         <p className="display text-2xl leading-tight tracking-[-0.02em]">
-          {label === "playlist" ? "Playlist dinleniyor…" : `${label} dinleniyor…`}
+          {t.listening(label)}
         </p>
-        <p className="text-muted">Benzer şarkılar aranıyor. Bu 10–30 saniye sürebilir.</p>
+        <p className="text-muted">{t.searching}</p>
       </div>
     </div>
   );
 }
 
 function Saved({ url, name, count, onAgain }: { url: string; name: string; count: number; onAgain: () => void }) {
+  const t = useT();
   return (
     <section className="flex flex-1 flex-col justify-center gap-6 pb-24">
       <h2 className="display text-[clamp(3rem,10vw,5rem)] leading-[0.95] tracking-[-0.035em]">
-        <Echo>Kaydedildi.</Echo>
+        <Echo>{t.saved}</Echo>
       </h2>
       <p className="arrive max-w-[40ch] text-lg text-muted" style={{ "--i": 2 } as React.CSSProperties}>
-        &quot;{name}&quot; {count} şarkıyla Spotify hesabına gizli playlist olarak eklendi.
+        {t.savedBody(name, count)}
       </p>
       <div className="arrive flex flex-wrap gap-3" style={{ "--i": 4 } as React.CSSProperties}>
         <a href={url} target="_blank" rel="noreferrer" className="btn-primary press">
-          Spotify&apos;da aç
+          {t.openInSpotify}
         </a>
         <button className="btn-secondary press" onClick={onAgain}>
-          Yeni liste oluştur
+          {t.another}
         </button>
       </div>
     </section>
@@ -638,11 +656,12 @@ function Results({
   onError: (e: unknown) => void;
   error: string | null;
 }) {
+  const t = useT();
   const [removed, setRemoved] = useState<Set<string>>(() => new Set(initialRemoved));
   const [name, setName] = useState(initialName ?? `${result.source.name} (Echo)`);
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
-  const kept = useMemo(() => result.tracks.filter((t) => !removed.has(t.uri)), [result.tracks, removed]);
+  const kept = useMemo(() => result.tracks.filter((tr) => !removed.has(tr.uri)), [result.tracks, removed]);
 
   async function save() {
     setSaving(true);
@@ -651,8 +670,8 @@ function Results({
         method: "POST",
         body: JSON.stringify({
           name,
-          description: `"${result.source.name}" ile benzer şarkılar. Echo List ile oluşturuldu.`,
-          uris: kept.map((t) => t.uri),
+          description: t.playlistDescription(result.source.name),
+          uris: kept.map((tr) => tr.uri),
         }),
       });
       onSaved(pl.url, name, kept.length);
@@ -665,11 +684,11 @@ function Results({
 
   async function copyLinks() {
     try {
-      await navigator.clipboard.writeText(kept.map((t) => `https://open.spotify.com/track/${t.id}`).join("\n"));
+      await navigator.clipboard.writeText(kept.map((tr) => `https://open.spotify.com/track/${tr.id}`).join("\n"));
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
-    } catch (e) {
-      onError(e);
+    } catch {
+      onError(Object.assign(new Error("clipboard"), { code: "clipboard" }));
     }
   }
 
@@ -690,14 +709,13 @@ function Results({
         <svg viewBox="0 0 16 16" className="h-4 w-4" aria-hidden>
           <path d="M10 3L5 8l5 5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
-        Yeni arama
+        {t.newSearch}
       </button>
 
       <div className="mt-6 mb-8 flex flex-col gap-3">
         <h1 className="display text-[clamp(2.25rem,7vw,3.75rem)] leading-[0.98] tracking-[-0.03em] text-balance">{source.name}</h1>
         <p className="text-muted">
-          {source.partial ? `Playlist'in ilk ${source.trackCount} şarkısına` : `${source.trackCount} şarkıya`} benzeyen{" "}
-          {kept.length} şarkı. Beğenmediklerini çıkar, kalanları kaydet.
+          {t.resultsSummary(source.partial, source.trackCount, kept.length)} {t.resultsHint}
         </p>
       </div>
 
@@ -708,17 +726,17 @@ function Results({
       )}
 
       <ol className="flex flex-col">
-        {result.tracks.map((t, i) => (
+        {result.tracks.map((tr, i) => (
           <TrackRow
-            key={t.uri}
+            key={tr.uri}
             index={i}
-            track={t}
-            removed={removed.has(t.uri)}
+            track={tr}
+            removed={removed.has(tr.uri)}
             onToggle={() =>
               setRemoved((prev) => {
                 const next = new Set(prev);
-                if (next.has(t.uri)) next.delete(t.uri);
-                else next.add(t.uri);
+                if (next.has(tr.uri)) next.delete(tr.uri);
+                else next.add(tr.uri);
                 return next;
               })
             }
@@ -734,19 +752,19 @@ function Results({
               value={name}
               onChange={(e) => setName(e.target.value)}
               maxLength={100}
-              aria-label="Yeni playlist'in adı"
+              aria-label={t.playlistName}
               className="field min-w-0 sm:flex-1"
             />
             <PrimaryButton onClick={save} disabled={saving || !kept.length || !name.trim()}>
-              {saving ? "Kaydediliyor…" : `Spotify'a kaydet (${kept.length})`}
+              {saving ? t.saving : t.saveCount(kept.length)}
             </PrimaryButton>
           </div>
         ) : (
           <div className="flex flex-col gap-2">
             <div className="flex gap-2">
               <PrimaryButton onClick={connectToSave} disabled={!kept.length} className="min-w-0 flex-1 text-[0.9375rem] [--btn-px:0.75rem] sm:text-base sm:[--btn-px:1.5rem]">
-                <span className="sm:hidden">Spotify&apos;a kaydet</span>
-                <span className="hidden sm:inline">Bağlan ve Spotify&apos;a kaydet</span>
+                <span className="sm:hidden">{t.saveShort}</span>
+                <span className="hidden sm:inline">{t.connectAndSave}</span>
               </PrimaryButton>
               <button onClick={copyLinks} disabled={!kept.length} className="btn-secondary press min-w-0 flex-1 text-[0.9375rem] [--btn-px:0.75rem] sm:text-base sm:[--btn-px:1.5rem]" aria-live="polite">
                 {copied ? (
@@ -754,17 +772,18 @@ function Results({
                     <svg viewBox="0 0 16 16" className="h-4 w-4 text-accent" aria-hidden>
                       <path d="M3 8.5l3.2 3L13 4.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
-                    Kopyalandı
+                    {t.copied}
                   </span>
                 ) : (
                   <span key="idle" className="swap inline-flex">
-                    Linkleri kopyala<span className="hidden sm:inline">&nbsp;({kept.length})</span>
+                    {t.copyLinks}
+                    <span className="hidden sm:inline">&nbsp;({kept.length})</span>
                   </span>
                 )}
               </button>
             </div>
             <p className="text-center text-xs text-muted sm:text-left">
-              Kopyaladığın linkleri Spotify masaüstü uygulamasında bir playlist&apos;e yapıştırırsan şarkılar eklenir.
+              {t.copyHelp}
             </p>
           </div>
         )}
@@ -784,6 +803,7 @@ function TrackRow({
   removed: boolean;
   onToggle: () => void;
 }) {
+  const t = useT();
   return (
     <li
       className="arrive group -mx-3 flex items-center gap-4 rounded-2xl px-3 py-2.5 hover:bg-raised/70"
@@ -803,16 +823,16 @@ function TrackRow({
         {track.because.length > 0 && (
           <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-muted">
             <EchoGlyph className="h-3.5 w-3.5 shrink-0 text-accent" />
-            <span className="truncate">{track.because.join(", ")} yankısı</span>
+            <span className="truncate">{t.echoOf(track.because.join(", "))}</span>
           </p>
         )}
       </div>
       <button
         onClick={onToggle}
-        aria-label={removed ? `${track.name} şarkısını geri ekle` : `${track.name} şarkısını çıkar`}
+        aria-label={removed ? t.addTrackBack(track.name) : t.removeTrack(track.name)}
         className={`press shrink-0 rounded-full px-3 py-1.5 text-sm ${removed ? "bg-surface text-ink" : "text-muted hover:bg-surface hover:text-ink"}`}
       >
-        {removed ? "Geri ekle" : "Çıkar"}
+        {removed ? t.addBack : t.remove}
       </button>
     </li>
   );

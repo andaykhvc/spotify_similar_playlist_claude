@@ -27,7 +27,7 @@ export function rateLimit(bucket: string, key: string, limit: number, windowMs: 
   const recent = (hits.get(id) ?? []).filter((t) => now - t < windowMs);
   if (recent.length >= limit) {
     const waitMin = Math.max(1, Math.ceil((windowMs - (now - recent[0])) / 60_000));
-    throw new UserFacingError(`Çok fazla istek attın, ${waitMin} dakika sonra tekrar dene.`, 429);
+    throw new UserFacingError("rateLimited", [waitMin], 429);
   }
   recent.push(now);
   hits.set(id, recent);

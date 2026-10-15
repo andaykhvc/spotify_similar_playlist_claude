@@ -1,3 +1,4 @@
+import type { ErrorCode } from "./i18n";
 // Version tags that don't change which song it is ("- Remastered 2011", "(Mono)", "[Deluxe Edition]").
 const VERSION_WORDS =
   /\b(remaster(ed)?|mono|stereo|deluxe|edition|version|anniversary|bonus|single|album|explicit|clean|radio edit)\b/;
@@ -75,17 +76,17 @@ export function parsePlaylistId(input: string): string | null {
   return link?.kind === "playlist" ? link.id : null;
 }
 
-/** What to tell someone who pasted a Spotify link we can't start from. */
-export function linkHint(kind: SpotifyLinkKind | undefined): string {
+/** Which error to show someone who pasted a Spotify link we can't start from. */
+export function linkHint(kind: SpotifyLinkKind | undefined): ErrorCode {
   switch (kind) {
     case "track":
-      return "Bu bir şarkı linki. Şarkılar sekmesinden bu şarkıyı arayıp seçebilirsin.";
+      return "trackLink";
     case "album":
     case "artist":
-      return "Bu bir albüm ya da sanatçı linki. Bir playlist linki yapıştır ya da Şarkılar sekmesinden şarkı seç.";
+      return "albumArtistLink";
     case "user":
-      return "Bu bir profil linki. Profildeki playlist'lerden birini seç.";
+      return "profileLink";
     default:
-      return "Geçerli bir Spotify playlist ya da profil linki gir.";
+      return "invalidLink";
   }
 }

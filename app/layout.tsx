@@ -10,7 +10,7 @@ const bricolage = Bricolage_Grotesque({
 
 export const metadata: Metadata = {
   title: "Echo List",
-  description: "Sevdiğin bir playlist'e ya da birkaç şarkıya benzeyen yeni şarkılar bul.",
+  description: "Find new songs that sound like a playlist you love, or a few songs you pick.",
 };
 
 export const viewport: Viewport = {
@@ -22,7 +22,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="tr" className={`${bricolage.variable} h-full antialiased`}>
+    <html lang="en" className={`${bricolage.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col">{children}</body>
     </html>
   );

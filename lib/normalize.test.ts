@@ -72,8 +72,9 @@ describe("parseSpotifyLink", () => {
   });
 
   it("gives a specific hint per link kind", () => {
-    expect(linkHint("track")).toMatch(/şarkı linki/);
-    expect(linkHint("user")).toMatch(/profil linki/);
-    expect(linkHint(undefined)).toMatch(/playlist ya da profil/);
+    expect(linkHint("track")).toBe("trackLink");
+    expect(linkHint("album")).toBe("albumArtistLink");
+    expect(linkHint("user")).toBe("profileLink");
+    expect(linkHint(undefined)).toBe("invalidLink");
   });
 });

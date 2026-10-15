@@ -4,6 +4,9 @@ Spotify'ın kaldırdığı "benzer playlist" özelliğinin yerine: bir playlist 
 benzerlik verisiyle benzer şarkılardan liste öner. **Giriş gerekmez**; istersen Spotify ile bağlanıp sonucu hesabına
 gizli playlist olarak kaydedersin, bağlanmazsan linkleri kopyalayıp Spotify masaüstünde bir playlist'e yapıştırırsın.
 
+Arayüz İngilizce (varsayılan) ve Türkçe; metinler `lib/i18n.ts`'te. Yasal sayfalar: `/privacy`, `/terms` ve Türkçe
+karşılıkları `/gizlilik`, `/kosullar`.
+
 ## Kurulum
 
 1. [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) → **Create app** → Web API seç.
