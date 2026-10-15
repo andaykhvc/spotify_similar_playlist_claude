@@ -60,6 +60,8 @@ export function SimilarApp() {
   const [phase, setPhase] = useState<Phase>({ kind: "pick" });
   const [error, setError] = useState<string | null>(null);
   const [size, setSize] = useState(30);
+  // The hero echo is a first-impression moment: once per page load, never on returns.
+  const [heroSeen, setHeroSeen] = useState(false);
   // Kept in a ref so the error survives StrictMode re-running the effect after the URL is cleaned.
   const errorParam = useRef<string | null | undefined>(undefined);
 
@@ -86,6 +88,7 @@ export function SimilarApp() {
   };
 
   async function generate(input: GenerateInput) {
+    setHeroSeen(true);
     setError(null);
     setPhase({
       kind: "loading",
@@ -132,7 +135,17 @@ export function SimilarApp() {
   } else if (phase.kind === "saved") {
     content = <Saved {...phase} onAgain={() => setPhase({ kind: "pick" })} />;
   } else {
-    content = <Picker user={user} size={size} setSize={setSize} error={error} onGenerate={generate} onError={fail} />;
+    content = (
+      <Picker
+        user={user}
+        size={size}
+        setSize={setSize}
+        error={error}
+        onGenerate={generate}
+        onError={fail}
+        animateHero={!heroSeen}
+      />
+    );
   }
 
   return (
@@ -191,12 +204,17 @@ function Account({ user, onLogout }: { user: User | null | undefined; onLogout: 
 }
 
 /** Text followed by fading outlined copies of itself: the brand's echo. */
-function Echo({ children }: { children: React.ReactNode }) {
+function Echo({ children, animate = true }: { children: React.ReactNode; animate?: boolean }) {
   return (
     <span className="echo">
       {children}
       {[1, 2, 3].map((i) => (
-        <span key={i} aria-hidden className="echo-ghost" style={{ "--i": i } as React.CSSProperties}>
+        <span
+          key={i}
+          aria-hidden
+          className={animate ? "echo-ghost" : "echo-ghost echo-still"}
+          style={{ "--i": i } as React.CSSProperties}
+        >
           {children}
         </span>
       ))}
@@ -204,10 +222,10 @@ function Echo({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Wordmark() {
+function Wordmark({ animate }: { animate: boolean }) {
   return (
     <h1 className="display text-[clamp(5rem,24vw,9.5rem)] leading-[0.8] tracking-[-0.045em]">
-      <Echo>
+      <Echo animate={animate}>
         Echo
         <br />
         List
@@ -223,6 +241,7 @@ function Picker({
   error,
   onGenerate,
   onError,
+  animateHero,
 }: {
   user: User | null;
   size: number;
@@ -230,6 +249,7 @@ function Picker({
   error: string | null;
   onGenerate: (input: GenerateInput) => void;
   onError: (e: unknown) => void;
+  animateHero: boolean;
 }) {
   const [tab, setTab] = useState<0 | 1>(0);
   const [link, setLink] = useState("");
@@ -237,7 +257,7 @@ function Picker({
   return (
     <section className="flex flex-col">
       <div className="pt-6 pb-10 sm:pt-10 sm:pb-14">
-        <Wordmark />
+        <Wordmark animate={animateHero} />
         <p className="mt-7 max-w-[34ch] text-lg leading-snug text-muted text-pretty sm:text-xl">
           Sevdiğin bir playlist&apos;e ya da birkaç şarkıya benzeyen yeni şarkılar bul. Giriş gerekmez.
         </p>
