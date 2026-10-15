@@ -1,9 +1,12 @@
 // Reads a playlist without any Spotify login via the public embed player page.
-// Not an official API: it returns only the first ~50 tracks and may break if Spotify
+// Not an official API: it returns at most the first 100 tracks and may break if Spotify
 // changes the page. Used for anonymous users and for playlists the dev-mode Web API
 // refuses to read (anything the user doesn't own).
 import { UserFacingError } from "./errors";
 import type { SourceTrack } from "./spotify";
+
+/** The embed page lists at most this many tracks; a list this long was probably cut off. */
+export const EMBED_TRACK_LIMIT = 100;
 
 export type EmbedPlaylist = { name: string; tracks: SourceTrack[] };
 

@@ -16,7 +16,7 @@ export async function GET() {
         total: p.items?.total ?? null,
         owner: p.owner.display_name ?? p.owner.id,
         // Dev-mode apps can only read items of playlists the user owns or collaborates on;
-        // the rest are read from the embed page, which caps at ~50 tracks.
+        // the rest are read from the embed page, which caps at 100 tracks.
         fullAccess: p.owner.id === userId || p.collaborative,
       })),
     });

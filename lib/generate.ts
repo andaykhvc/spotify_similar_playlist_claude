@@ -1,5 +1,5 @@
 import pLimit from "p-limit";
-import { fetchEmbedPlaylist } from "./embed";
+import { EMBED_TRACK_LIMIT, fetchEmbedPlaylist } from "./embed";
 import { UserFacingError } from "./errors";
 import { getArtistTopTracks, getSimilarArtists, getSimilarTracks } from "./lastfm";
 import { normalizeTitle, trackKey } from "./normalize";
@@ -31,7 +31,7 @@ const FALLBACK_WEIGHT = 0.5;
 export type Source = {
   name: string;
   tracks: SourceTrack[];
-  /** True when only the first ~50 tracks could be read (embed page). */
+  /** True when the embed page cut the playlist off at its track limit. */
   partial?: boolean;
 };
 
@@ -67,7 +67,7 @@ export async function resolvePlaylist(userToken: string | null, playlistId: stri
     }
   }
   const embed = await fetchEmbedPlaylist(playlistId);
-  return { ...embed, partial: true };
+  return { ...embed, partial: embed.tracks.length >= EMBED_TRACK_LIMIT };
 }
 
 async function similarForSeed(seed: TrackRef): Promise<SimilarResult | null> {

@@ -19,7 +19,7 @@ gizli playlist olarak kaydedersin, bağlanmazsan linkleri kopyalayıp Spotify ma
 ## Nasıl çalışır
 
 - Kaynak: kendi playlist'in Web API'den (tam liste); başka playlist'ler ve girişsiz kullanım için Spotify'ın public
-  embed sayfasından (ilk ~50 şarkı); ya da arayıp seçtiğin 1–10 şarkı.
+  embed sayfasından (en fazla ilk 100 şarkı); ya da arayıp seçtiğin 1–10 şarkı.
 - Kaynak şarkılardan, sanatçılara dengeli dağılmış en fazla 30 "tohum" seçilir.
 - Her tohum için Last.fm `track.getSimilar` çağrılır (veri yoksa benzer sanatçıların popüler şarkıları).
 - Birden çok tohumun önerdiği şarkılar öne çıkar; kaynakta olanlar elenir, sanatçı başına en fazla 2 şarkı.
@@ -30,7 +30,7 @@ Kod: `lib/similar.ts` (saf öneri mantığı), `lib/generate.ts` (akış), `lib/
 ## Sınırlamalar (Spotify Web API, Şubat 2026 dev-mode kuralları)
 
 - Web API sadece **sahibi olduğun veya ortak düzenlediğin** playlist'leri okutuyor; diğerleri embed sayfasından okunuyor.
-  Embed resmi bir API değil: ilk ~50 şarkıyı veriyor ve Spotify sayfayı değiştirirse bozulabilir
+  Embed resmi bir API değil: en fazla ilk 100 şarkıyı veriyor ve Spotify sayfayı değiştirirse bozulabilir
   (şarkı seçerek başlama modu etkilenmez).
 - Girişsiz kullanım tek app'in Spotify/Last.fm kotasını paylaşır; IP başına basit bir istek sınırı var
   (benzer liste: 6 / 10 dk, arama: 60 / dk).

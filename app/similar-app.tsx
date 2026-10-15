@@ -365,7 +365,7 @@ function Picker({
           </label>
           {tab === 0 && (
             <span>
-              Herkese açık her playlist olur; giriş yoksa ilk 50 şarkısına bakılır. Profil linki verirsen playlist&apos;lerini
+              Herkese açık her playlist olur; çok uzunsa ilk 100 şarkısına bakılır. Profil linki verirsen playlist&apos;lerini
               listeleriz.
             </span>
           )}
@@ -559,7 +559,7 @@ function PlaylistGrid({ playlists, onPick }: { playlists: Playlist[]; onPick: (i
         <li key={p.id} className="arrive" style={{ "--i": i } as React.CSSProperties}>
           <button
             onClick={() => onPick(p.id)}
-            title={p.fullAccess ? undefined : "Senin olmadığı için ilk 50 şarkısına bakılır"}
+            title={p.fullAccess ? undefined : "Senin olmadığı için en fazla ilk 100 şarkısına bakılır"}
             className="press group flex w-full flex-col gap-2.5 text-left"
           >
             <Cover
