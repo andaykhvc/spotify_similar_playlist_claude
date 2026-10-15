@@ -1,4 +1,6 @@
 import pLimit from "p-limit";
+import { fetchEmbedPlaylist } from "./embed";
+import { UserFacingError } from "./errors";
 import { getArtistTopTracks, getSimilarArtists, getSimilarTracks } from "./lastfm";
 import { normalizeTitle, trackKey } from "./normalize";
 import {
@@ -10,13 +12,28 @@ import {
   type SimilarResult,
   type TrackRef,
 } from "./similar";
-import { getPlaylistMeta, getPlaylistTracks, searchTracks, SpotifyError, type SpotifyTrack } from "./spotify";
+import {
+  getPlaylistMeta,
+  getPlaylistTracks,
+  searchTracks,
+  SpotifyError,
+  toSourceTrack,
+  type SourceTrack,
+  type SpotifyTrack,
+} from "./spotify";
+
+export { UserFacingError };
 
 const MAX_SEEDS = 30;
 const MAX_PER_ARTIST = 2;
 const FALLBACK_WEIGHT = 0.5;
 
-export class UserFacingError extends Error {}
+export type Source = {
+  name: string;
+  tracks: SourceTrack[];
+  /** True when only the first ~50 tracks could be read (embed page). */
+  partial?: boolean;
+};
 
 export type SuggestedTrack = {
   id: string;
@@ -28,10 +45,30 @@ export type SuggestedTrack = {
 };
 
 export type GenerateResult = {
-  source: { id: string; name: string; trackCount: number };
+  source: { name: string; trackCount: number; partial: boolean };
   tracks: SuggestedTrack[];
   stats: { seeds: number; candidates: number; searched: number };
 };
+
+/**
+ * Reads a playlist's tracks. With a user token the Web API gives the full list, but in dev mode only
+ * for playlists the user owns/collaborates on; everything else falls back to the public embed page.
+ */
+export async function resolvePlaylist(userToken: string | null, playlistId: string): Promise<Source> {
+  if (userToken) {
+    try {
+      const [meta, tracks] = await Promise.all([
+        getPlaylistMeta(userToken, playlistId),
+        getPlaylistTracks(userToken, playlistId),
+      ]);
+      return { name: meta.name, tracks: tracks.map(toSourceTrack) };
+    } catch (e) {
+      if (!(e instanceof SpotifyError && (e.status === 403 || e.status === 404))) throw e;
+    }
+  }
+  const embed = await fetchEmbedPlaylist(playlistId);
+  return { ...embed, partial: true };
+}
 
 async function similarForSeed(seed: TrackRef): Promise<SimilarResult | null> {
   try {
@@ -65,25 +102,13 @@ async function findOnSpotify(token: string, c: Candidate): Promise<SpotifyTrack 
   return hit;
 }
 
-export async function generateSimilar(token: string, playlistId: string, size: number): Promise<GenerateResult> {
-  const meta = await getPlaylistMeta(token, playlistId);
-  let source: SpotifyTrack[];
-  try {
-    source = await getPlaylistTracks(token, playlistId);
-  } catch (e) {
-    if (e instanceof SpotifyError && (e.status === 403 || e.status === 404)) {
-      throw new UserFacingError(
-        "Spotify bu playlist'in şarkılarını sadece sahibine veya ortak düzenleyenlerine gösteriyor. " +
-          "Spotify'da playlist'i kendi hesabında bir kopyaya ekleyip (Ekle → Yeni çalma listesi) onu seç.",
-      );
-    }
-    throw e;
-  }
-  if (!source.length) throw new UserFacingError("Bu playlist'te benzerini bulabileceğim şarkı yok.");
+/** `token` is used only for Spotify search, so an app (client-credentials) token works too. */
+export async function generateSimilar(token: string, source: Source, size: number): Promise<GenerateResult> {
+  if (!source.tracks.length) throw new UserFacingError("Bu playlist'te benzerini bulabileceğim şarkı yok.");
 
-  const refs = source.map((t) => ({ artist: t.artists[0]?.name ?? "", title: t.name }));
-  const exclude = new Set(source.flatMap((t) => t.artists.map((a) => trackKey(a.name, t.name))));
-  const sourceUris = new Set(source.map((t) => t.uri));
+  const refs = source.tracks.map((t) => ({ artist: t.artists[0] ?? "", title: t.title }));
+  const exclude = new Set(source.tracks.flatMap((t) => t.artists.map((a) => trackKey(a, t.title))));
+  const sourceUris = new Set(source.tracks.map((t) => t.uri));
 
   const seeds = selectSeeds(refs, MAX_SEEDS);
   const lastfmLimit = pLimit(4);
@@ -91,10 +116,11 @@ export async function generateSimilar(token: string, playlistId: string, size: n
     (r): r is SimilarResult => r !== null,
   );
   if (!results.length && seeds.length) {
-    throw new UserFacingError("Last.fm'e şu an ulaşılamıyor, biraz sonra tekrar dene.");
+    throw new UserFacingError("Last.fm'e şu an ulaşılamıyor, biraz sonra tekrar dene.", 503);
   }
 
-  const candidates = diversify(aggregateCandidates(results, exclude), MAX_PER_ARTIST);
+  // Few seeds (song mode) need a looser per-artist cap or the list stays short.
+  const candidates = diversify(aggregateCandidates(results, exclude), seeds.length < 5 ? 3 : MAX_PER_ARTIST);
 
   // Resolve in small parallel batches and stop as soon as we have enough.
   const tracks: SuggestedTrack[] = [];
@@ -120,7 +146,7 @@ export async function generateSimilar(token: string, playlistId: string, size: n
   }
 
   return {
-    source: { id: playlistId, name: meta.name, trackCount: source.length },
+    source: { name: source.name, trackCount: source.tracks.length, partial: !!source.partial },
     tracks,
     stats: { seeds: seeds.length, candidates: candidates.length, searched },
   };

@@ -2,6 +2,8 @@
 // /playlists/{id}/items (not /tracks), POST /me/playlists, search limit <= 10,
 // and playlist contents are only readable for playlists the user owns or collaborates on.
 
+import { env } from "./session";
+
 const API = "https://api.spotify.com/v1";
 
 export class SpotifyError extends Error {
@@ -56,6 +58,15 @@ export type SpotifyTrack = {
   album: { name: string; images: Image[] };
 };
 
+/** Minimal track shape shared by the Web API and the embed-page reader. */
+export type SourceTrack = { uri: string; title: string; artists: string[] };
+
+export const toSourceTrack = (t: SpotifyTrack): SourceTrack => ({
+  uri: t.uri,
+  title: t.name,
+  artists: t.artists.map((a) => a.name),
+});
+
 type Paging<T> = { items: T[]; next: string | null; total: number };
 
 export type PlaylistSummary = {
@@ -66,6 +77,25 @@ export type PlaylistSummary = {
   images: Image[] | null;
   items?: { total: number };
 };
+
+// App-only token (Client Credentials) for anonymous visitors: search works, user data doesn't.
+let appToken: { value: string; expiresAt: number } | null = null;
+
+export async function getAppToken(): Promise<string> {
+  if (appToken && appToken.expiresAt - 60_000 > Date.now()) return appToken.value;
+  const res = await fetch("https://accounts.spotify.com/api/token", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Authorization: `Basic ${Buffer.from(`${env.clientId}:${env.clientSecret}`).toString("base64")}`,
+    },
+    body: new URLSearchParams({ grant_type: "client_credentials" }),
+  });
+  if (!res.ok) throw new Error(`Spotify client-credentials token failed (${res.status}): ${await res.text()}`);
+  const t: { access_token: string; expires_in: number } = await res.json();
+  appToken = { value: t.access_token, expiresAt: Date.now() + t.expires_in * 1000 };
+  return appToken.value;
+}
 
 export function getMe(token: string) {
   return spotifyFetch<{ id: string; display_name?: string }>(token, "/me");

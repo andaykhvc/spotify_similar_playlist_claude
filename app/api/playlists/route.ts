@@ -15,8 +15,9 @@ export async function GET() {
         image: p.images?.[0]?.url ?? null,
         total: p.items?.total ?? null,
         owner: p.owner.display_name ?? p.owner.id,
-        // Dev-mode apps can only read items of playlists the user owns or collaborates on.
-        readable: p.owner.id === userId || p.collaborative,
+        // Dev-mode apps can only read items of playlists the user owns or collaborates on;
+        // the rest are read from the embed page, which caps at ~50 tracks.
+        fullAccess: p.owner.id === userId || p.collaborative,
       })),
     });
   } catch (e) {

@@ -24,6 +24,9 @@ export const env = {
   get clientId() {
     return requireEnv("SPOTIFY_CLIENT_ID");
   },
+  get clientSecret() {
+    return requireEnv("SPOTIFY_CLIENT_SECRET");
+  },
   get redirectUri() {
     return requireEnv("SPOTIFY_REDIRECT_URI");
   },
@@ -95,5 +98,15 @@ export async function getAccessToken(): Promise<string> {
   } catch (e) {
     session.destroy();
     throw e instanceof AuthError ? e : new AuthError(String(e));
+  }
+}
+
+/** The logged-in user's token, or null for anonymous visitors (or an expired, unrefreshable session). */
+export async function getUserTokenOrNull(): Promise<string | null> {
+  try {
+    return await getAccessToken();
+  } catch (e) {
+    if (e instanceof AuthError) return null;
+    throw e;
   }
 }

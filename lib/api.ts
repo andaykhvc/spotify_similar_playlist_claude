@@ -1,6 +1,6 @@
 import { unstable_rethrow } from "next/navigation";
 import { NextResponse } from "next/server";
-import { UserFacingError } from "./generate";
+import { UserFacingError } from "./errors";
 import { AuthError } from "./session";
 import { SpotifyError } from "./spotify";
 
@@ -12,7 +12,7 @@ export function errorResponse(e: unknown) {
     return NextResponse.json({ error: "Oturumun düştü, tekrar giriş yap.", auth: true }, { status: 401 });
   }
   if (e instanceof UserFacingError) {
-    return NextResponse.json({ error: e.message }, { status: 400 });
+    return NextResponse.json({ error: e.message }, { status: e.status });
   }
   if (e instanceof SpotifyError && e.status === 429) {
     return NextResponse.json({ error: "Spotify istek sınırına takıldık, bir dakika sonra tekrar dene." }, { status: 429 });
