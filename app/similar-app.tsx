@@ -17,6 +17,10 @@ type SearchTrack = { uri: string; id: string; title: string; artists: string[]; 
 /** What the server needs to generate: a playlist link/ID or a handful of picked songs. */
 type GenerateInput = { playlist: string } | { seeds: SearchTrack[] };
 
+/** The user's in-progress input. Lives above the picker so it survives a failed search. */
+type Draft = { tab: 0 | 1; link: string; seeds: SearchTrack[] };
+type SetDraft = React.Dispatch<React.SetStateAction<Draft>>;
+
 const LOGIN_ERRORS: Record<string, string> = {
   denied: "Spotify izni verilmedi. Kaydetmek için tekrar bağlanabilirsin.",
   state: "Bağlantı yarıda kaldı. Tekrar bağlan.",
@@ -62,6 +66,7 @@ export function SimilarApp() {
   const [size, setSize] = useState(30);
   // The hero echo is a first-impression moment: once per page load, never on returns.
   const [heroSeen, setHeroSeen] = useState(false);
+  const [draft, setDraft] = useState<Draft>({ tab: 0, link: "", seeds: [] });
   // Kept in a ref so the error survives StrictMode re-running the effect after the URL is cleaned.
   const errorParam = useRef<string | null | undefined>(undefined);
 
@@ -144,6 +149,8 @@ export function SimilarApp() {
         onGenerate={generate}
         onError={fail}
         animateHero={!heroSeen}
+        draft={draft}
+        setDraft={setDraft}
       />
     );
   }
@@ -242,6 +249,8 @@ function Picker({
   onGenerate,
   onError,
   animateHero,
+  draft,
+  setDraft,
 }: {
   user: User | null;
   size: number;
@@ -250,9 +259,10 @@ function Picker({
   onGenerate: (input: GenerateInput) => void;
   onError: (e: unknown) => void;
   animateHero: boolean;
+  draft: Draft;
+  setDraft: SetDraft;
 }) {
-  const [tab, setTab] = useState<0 | 1>(0);
-  const [link, setLink] = useState("");
+  const { tab, link } = draft;
 
   return (
     <section className="flex flex-col">
@@ -271,7 +281,7 @@ function Picker({
               key={label}
               role="tab"
               aria-selected={tab === i}
-              onClick={() => setTab(i as 0 | 1)}
+              onClick={() => setDraft((d) => ({ ...d, tab: i as 0 | 1 }))}
               className={`relative z-10 rounded-full py-2 transition-colors ${tab === i ? "text-ink" : "text-muted hover:text-ink"}`}
             >
               {label}
@@ -289,7 +299,7 @@ function Picker({
           >
             <input
               value={link}
-              onChange={(e) => setLink(e.target.value)}
+              onChange={(e) => setDraft((d) => ({ ...d, link: e.target.value }))}
               placeholder="open.spotify.com/playlist/…"
               aria-label="Spotify playlist linki"
               inputMode="url"
@@ -299,7 +309,12 @@ function Picker({
             <PrimaryButton disabled={!link.trim()}>Benzerlerini bul</PrimaryButton>
           </form>
         ) : (
-          <SongPicker onGenerate={(seeds) => onGenerate({ seeds })} onError={onError} />
+          <SongPicker
+            selected={draft.seeds}
+            setSelected={(update) => setDraft((d) => ({ ...d, seeds: update(d.seeds) }))}
+            onGenerate={(seeds) => onGenerate({ seeds })}
+            onError={onError}
+          />
         )}
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
@@ -329,11 +344,20 @@ function Picker({
 
 const MAX_SEEDS = 10;
 
-function SongPicker({ onGenerate, onError }: { onGenerate: (seeds: SearchTrack[]) => void; onError: (e: unknown) => void }) {
+function SongPicker({
+  selected,
+  setSelected,
+  onGenerate,
+  onError,
+}: {
+  selected: SearchTrack[];
+  setSelected: (update: (s: SearchTrack[]) => SearchTrack[]) => void;
+  onGenerate: (seeds: SearchTrack[]) => void;
+  onError: (e: unknown) => void;
+}) {
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<SearchTrack[]>([]);
   const [active, setActive] = useState(0);
-  const [selected, setSelected] = useState<SearchTrack[]>([]);
   const latest = useRef("");
   const inputRef = useRef<HTMLInputElement>(null);
 
