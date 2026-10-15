@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { Profile } from "@/lib/embed";
 import type { GenerateResult, SuggestedTrack } from "@/lib/generate";
+import { parseSpotifyLink } from "@/lib/normalize";
+import { SiteFooter } from "./site-footer";
 
 type User = { id: string; name: string };
 type Playlist = {
@@ -18,7 +21,7 @@ type SearchTrack = { uri: string; id: string; title: string; artists: string[]; 
 type GenerateInput = { playlist: string } | { seeds: SearchTrack[] };
 
 /** The user's in-progress input. Lives above the picker so it survives a failed search. */
-type Draft = { tab: 0 | 1; link: string; seeds: SearchTrack[] };
+type Draft = { tab: 0 | 1; link: string; seeds: SearchTrack[]; profile: Profile | null };
 type SetDraft = React.Dispatch<React.SetStateAction<Draft>>;
 
 const LOGIN_ERRORS: Record<string, string> = {
@@ -66,7 +69,7 @@ export function SimilarApp() {
   const [size, setSize] = useState(30);
   // The hero echo is a first-impression moment: once per page load, never on returns.
   const [heroSeen, setHeroSeen] = useState(false);
-  const [draft, setDraft] = useState<Draft>({ tab: 0, link: "", seeds: [] });
+  const [draft, setDraft] = useState<Draft>({ tab: 0, link: "", seeds: [], profile: null });
   // Kept in a ref so the error survives StrictMode re-running the effect after the URL is cleaned.
   const errorParam = useRef<string | null | undefined>(undefined);
 
@@ -162,6 +165,7 @@ export function SimilarApp() {
         <Account user={user} onLogout={() => setUser(null)} />
       </header>
       <main className="flex flex-1 flex-col">{content}</main>
+      {user !== undefined && phase.kind !== "loading" && <SiteFooter />}
     </div>
   );
 }
@@ -262,7 +266,33 @@ function Picker({
   draft: Draft;
   setDraft: SetDraft;
 }) {
-  const { tab, link } = draft;
+  const { tab, link, profile } = draft;
+  const [openingProfile, setOpeningProfile] = useState(false);
+
+  // A profile link lists that person's public playlists to pick from; anything else goes to the server.
+  async function submitLink() {
+    const value = link.trim();
+    if (!value) return;
+    if (parseSpotifyLink(value)?.kind !== "user") {
+      onGenerate({ playlist: value });
+      return;
+    }
+    setOpeningProfile(true);
+    setDraft((d) => ({ ...d, profile: null }));
+    try {
+      const p = await api<Profile>(`/api/profile?u=${encodeURIComponent(value)}`);
+      setDraft((d) => ({ ...d, profile: p }));
+      // On phones the list lands below the fold; bring it into view.
+      requestAnimationFrame(() => {
+        const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        document.getElementById("profile-playlists")?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+      });
+    } catch (e) {
+      onError(e);
+    } finally {
+      setOpeningProfile(false);
+    }
+  }
 
   return (
     <section className="flex flex-col">
@@ -294,19 +324,21 @@ function Picker({
             className="flex flex-col gap-3 sm:flex-row"
             onSubmit={(e) => {
               e.preventDefault();
-              if (link.trim()) onGenerate({ playlist: link.trim() });
+              submitLink();
             }}
           >
             <input
               value={link}
               onChange={(e) => setDraft((d) => ({ ...d, link: e.target.value }))}
-              placeholder="open.spotify.com/playlist/…"
-              aria-label="Spotify playlist linki"
+              placeholder="Playlist ya da profil linki"
+              aria-label="Spotify playlist ya da profil linki"
               inputMode="url"
               autoComplete="off"
               className="field min-w-0 sm:flex-1"
             />
-            <PrimaryButton disabled={!link.trim()}>Benzerlerini bul</PrimaryButton>
+            <PrimaryButton disabled={!link.trim() || openingProfile}>
+              {openingProfile ? "Profil açılıyor…" : "Benzerlerini bul"}
+            </PrimaryButton>
           </form>
         ) : (
           <SongPicker
@@ -331,11 +363,33 @@ function Picker({
             />
             <span className="w-7 tabular-nums text-ink">{size}</span>
           </label>
-          {tab === 0 && <span>Herkese açık her playlist olur; giriş yoksa ilk 50 şarkısına bakılır.</span>}
+          {tab === 0 && (
+            <span>
+              Herkese açık her playlist olur; giriş yoksa ilk 50 şarkısına bakılır. Profil linki verirsen playlist&apos;lerini
+              listeleriz.
+            </span>
+          )}
         </div>
 
         {error && <ErrorNote>{error}</ErrorNote>}
       </div>
+
+      {tab === 0 && profile && (
+        <div id="profile-playlists" className="mt-16 flex scroll-mt-6 flex-col gap-5">
+          <div className="flex flex-col gap-1">
+            <h2 className="display text-2xl leading-tight tracking-[-0.02em]">{profile.name} profilindeki playlist&apos;ler</h2>
+            {profile.total > profile.playlists.length && (
+              <p className="text-sm text-muted">
+                Profilde {profile.total} herkese açık playlist var; Spotify ilk {profile.playlists.length} tanesini gösteriyor.
+              </p>
+            )}
+          </div>
+          <PlaylistGrid
+            playlists={profile.playlists.map((p) => ({ ...p, total: null, owner: profile.name, fullAccess: false }))}
+            onPick={(id) => onGenerate({ playlist: id })}
+          />
+        </div>
+      )}
 
       {user && <MyPlaylists onPick={(id) => onGenerate({ playlist: id })} onError={onError} />}
     </section>
@@ -492,31 +546,37 @@ function MyPlaylists({ onPick, onError }: { onPick: (id: string) => void; onErro
       ) : playlists.length === 0 ? (
         <p className="text-muted">Spotify hesabında henüz playlist yok. Yukarıdan bir link ya da şarkı ile başla.</p>
       ) : (
-        <ul className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3">
-          {playlists.map((p, i) => (
-            <li key={p.id} className="arrive" style={{ "--i": i } as React.CSSProperties}>
-              <button
-                onClick={() => onPick(p.id)}
-                title={p.fullAccess ? undefined : "Senin olmadığı için ilk 50 şarkısına bakılır"}
-                className="press group flex w-full flex-col gap-2.5 text-left"
-              >
-                <Cover
-                  src={p.image}
-                  className="aspect-square w-full rounded-xl transition-[box-shadow,transform] duration-200 group-hover:shadow-[var(--shadow)]"
-                />
-                <span className="min-w-0">
-                  <span className="block truncate font-medium">{p.name}</span>
-                  <span className="block truncate text-sm text-muted">
-                    {p.total !== null ? `${p.total} şarkı, ` : ""}
-                    {p.owner}
-                  </span>
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
+        <PlaylistGrid playlists={playlists} onPick={onPick} />
       )}
     </div>
+  );
+}
+
+function PlaylistGrid({ playlists, onPick }: { playlists: Playlist[]; onPick: (id: string) => void }) {
+  return (
+    <ul className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3">
+      {playlists.map((p, i) => (
+        <li key={p.id} className="arrive" style={{ "--i": i } as React.CSSProperties}>
+          <button
+            onClick={() => onPick(p.id)}
+            title={p.fullAccess ? undefined : "Senin olmadığı için ilk 50 şarkısına bakılır"}
+            className="press group flex w-full flex-col gap-2.5 text-left"
+          >
+            <Cover
+              src={p.image}
+              className="aspect-square w-full rounded-xl transition-[box-shadow,transform] duration-200 group-hover:shadow-[var(--shadow)]"
+            />
+            <span className="min-w-0">
+              <span className="block truncate font-medium">{p.name}</span>
+              <span className="block truncate text-sm text-muted">
+                {p.total !== null ? `${p.total} şarkı, ` : ""}
+                {p.owner}
+              </span>
+            </span>
+          </button>
+        </li>
+      ))}
+    </ul>
   );
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseEmbedHtml } from "./embed";
+import { parseEmbedHtml, parseProfileHtml } from "./embed";
 
 const page = (data: unknown) =>
   `<html><body><div id="__next"></div><script id="__NEXT_DATA__" type="application/json">${JSON.stringify(
@@ -44,5 +44,45 @@ describe("parseEmbedHtml", () => {
     expect(
       parseEmbedHtml('<script id="__NEXT_DATA__" type="application/json">{broken</script>'),
     ).toBeNull();
+  });
+});
+
+describe("parseProfileHtml", () => {
+  const page = (state: unknown) =>
+    `<html><script id="initialState" type="text/plain">${Buffer.from(JSON.stringify(state)).toString("base64")}</script></html>`;
+  const playlist = (id: string, name: string, image?: string) => ({
+    _uri: `spotify:playlist:${id}`,
+    data: { name, uri: `spotify:playlist:${id}`, images: { items: image ? [{ sources: [{ url: image }] }] : [] } },
+  });
+
+  it("reads the user's name and public playlists", () => {
+    const html = page({
+      entities: {
+        items: {
+          "spotify:user:wizzler": {
+            __typename: "User",
+            name: "Ronald",
+            publicPlaylistsV2: {
+              totalCount: 42,
+              items: [playlist("aaaaaaaaaaaaaaaaaaaaaa", "Yol", "https://i.scdn.co/x"), playlist("bbbbbbbbbbbbbbbbbbbbbb", "Gece")],
+            },
+          },
+        },
+      },
+    });
+    expect(parseProfileHtml(html)).toEqual({
+      name: "Ronald",
+      total: 42,
+      playlists: [
+        { id: "aaaaaaaaaaaaaaaaaaaaaa", name: "Yol", image: "https://i.scdn.co/x" },
+        { id: "bbbbbbbbbbbbbbbbbbbbbb", name: "Gece", image: null },
+      ],
+    });
+  });
+
+  it("returns null when the page shape is unknown", () => {
+    expect(parseProfileHtml("<html></html>")).toBeNull();
+    expect(parseProfileHtml('<script id="initialState" type="text/plain">!!!</script>')).toBeNull();
+    expect(parseProfileHtml(page({ entities: { items: {} } }))).toBeNull();
   });
 });

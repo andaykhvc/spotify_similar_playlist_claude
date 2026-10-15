@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeArtist, normalizeTitle, parsePlaylistId, trackKey } from "./normalize";
+import { linkHint, normalizeArtist, normalizeTitle, parsePlaylistId, parseSpotifyLink, trackKey } from "./normalize";
 
 describe("normalizeTitle", () => {
   it.each([
@@ -49,5 +49,31 @@ describe("parsePlaylistId", () => {
   it("rejects non-playlist input", () => {
     expect(parsePlaylistId("https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC")).toBeNull();
     expect(parsePlaylistId("hello")).toBeNull();
+  });
+});
+
+describe("parseSpotifyLink", () => {
+  it.each([
+    ["https://open.spotify.com/user/31a6sxvteagnjwzq7abcdefgh?si=xyz", { kind: "user", id: "31a6sxvteagnjwzq7abcdefgh" }],
+    ["https://open.spotify.com/intl-tr/user/wizzler", { kind: "user", id: "wizzler" }],
+    ["spotify:user:spotify", { kind: "user", id: "spotify" }],
+    ["https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC?si=1", { kind: "track", id: "4uLU6hMCjMI75M1A2tKUQC" }],
+    ["https://open.spotify.com/embed/playlist/37i9dQZF1DXcBWIGoYBM5M", { kind: "playlist", id: "37i9dQZF1DXcBWIGoYBM5M" }],
+    ["https://open.spotify.com/album/4aawyAB9vmqN3uQ7FjRGTy", { kind: "album", id: "4aawyAB9vmqN3uQ7FjRGTy" }],
+    ["37i9dQZF1DXcBWIGoYBM5M", { kind: "playlist", id: "37i9dQZF1DXcBWIGoYBM5M" }],
+  ])("parses %s", (input, out) => {
+    expect(parseSpotifyLink(input)).toEqual(out);
+  });
+
+  it("rejects malformed ids and unsafe usernames", () => {
+    expect(parseSpotifyLink("https://open.spotify.com/playlist/short")).toBeNull();
+    expect(parseSpotifyLink("https://open.spotify.com/user/a%2F..%2Fb")).toBeNull();
+    expect(parseSpotifyLink("https://example.com/user/wizzler")).toBeNull();
+  });
+
+  it("gives a specific hint per link kind", () => {
+    expect(linkHint("track")).toMatch(/şarkı linki/);
+    expect(linkHint("user")).toMatch(/profil linki/);
+    expect(linkHint(undefined)).toMatch(/playlist ya da profil/);
   });
 });

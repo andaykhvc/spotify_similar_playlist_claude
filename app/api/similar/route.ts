@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { errorResponse } from "@/lib/api";
 import { generateSimilar, resolvePlaylist, UserFacingError, type Source } from "@/lib/generate";
-import { parsePlaylistId } from "@/lib/normalize";
+import { linkHint, parseSpotifyLink } from "@/lib/normalize";
 import { clientIp, rateLimit } from "@/lib/rateLimit";
 import { getUserTokenOrNull } from "@/lib/session";
 import { getAppToken, type SourceTrack } from "@/lib/spotify";
@@ -36,8 +36,9 @@ export async function POST(req: NextRequest) {
       const tracks = parseSeeds(body.seeds);
       source = { name: tracks.map((t) => t.title).slice(0, 3).join(", "), tracks };
     } else {
-      const playlistId = parsePlaylistId(String(body.playlist ?? ""));
-      if (!playlistId) throw new UserFacingError("Geçerli bir Spotify playlist linki ya da ID'si gir.");
+      const link = parseSpotifyLink(String(body.playlist ?? ""));
+      if (link?.kind !== "playlist") throw new UserFacingError(linkHint(link?.kind));
+      const playlistId = link.id;
       source = await resolvePlaylist(userToken, playlistId);
     }
 

@@ -275,6 +275,41 @@ input[type="range"] {
   transition-duration: 180ms;
 }
 
+/* Long-form legal text: readable measure and rhythm. */
+.legal {
+  max-width: 68ch;
+  line-height: 1.65;
+}
+.legal h2 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.5rem;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  margin: 2.5rem 0 0.75rem;
+}
+.legal p,
+.legal ul {
+  margin: 0.75rem 0;
+}
+.legal ul {
+  padding-left: 1.25rem;
+  list-style: disc;
+}
+.legal li {
+  margin: 0.35rem 0;
+}
+.legal a {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.legal code {
+  font-size: 0.9em;
+  padding: 0.1em 0.35em;
+  border-radius: 6px;
+  background: var(--surface);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .echo-ghost,
   .arrive,

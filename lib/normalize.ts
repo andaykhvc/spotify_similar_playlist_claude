@@ -43,11 +43,49 @@ export function trackKey(artist: string, title: string): string {
   return `${normalizeArtist(artist)}|${normalizeTitle(title)}`;
 }
 
-export function parsePlaylistId(input: string): string | null {
+export type SpotifyLinkKind = "playlist" | "user" | "track" | "album" | "artist";
+export type SpotifyLink = { kind: SpotifyLinkKind; id: string };
+
+const BASE62_ID = /^[A-Za-z0-9]{22}$/;
+// Usernames can be legacy handles ("wizzler") or generated ids; keep them to a safe charset.
+const USER_ID = /^[A-Za-z0-9._-]{1,64}$/;
+
+/** Recognises open.spotify.com links (any locale prefix, embed or not), spotify: URIs and bare playlist ids. */
+export function parseSpotifyLink(input: string): SpotifyLink | null {
   const s = input.trim();
   const m =
-    s.match(/open\.spotify\.com\/(?:intl-[a-z-]+\/)?playlist\/([A-Za-z0-9]{22})/) ??
-    s.match(/^spotify:playlist:([A-Za-z0-9]{22})$/) ??
-    s.match(/^([A-Za-z0-9]{22})$/);
-  return m ? m[1] : null;
+    s.match(/open\.spotify\.com\/(?:intl-[a-z-]+\/)?(?:embed\/)?(playlist|user|track|album|artist)\/([^/?#\s]+)/i) ??
+    s.match(/^spotify:(playlist|user|track|album|artist):([^:\s]+)$/i);
+  if (m) {
+    const kind = m[1].toLowerCase() as SpotifyLinkKind;
+    let id = m[2];
+    try {
+      id = decodeURIComponent(id);
+    } catch {
+      return null;
+    }
+    const ok = kind === "user" ? USER_ID.test(id) : BASE62_ID.test(id);
+    return ok ? { kind, id } : null;
+  }
+  return BASE62_ID.test(s) ? { kind: "playlist", id: s } : null;
+}
+
+export function parsePlaylistId(input: string): string | null {
+  const link = parseSpotifyLink(input);
+  return link?.kind === "playlist" ? link.id : null;
+}
+
+/** What to tell someone who pasted a Spotify link we can't start from. */
+export function linkHint(kind: SpotifyLinkKind | undefined): string {
+  switch (kind) {
+    case "track":
+      return "Bu bir şarkı linki. Şarkılar sekmesinden bu şarkıyı arayıp seçebilirsin.";
+    case "album":
+    case "artist":
+      return "Bu bir albüm ya da sanatçı linki. Bir playlist linki yapıştır ya da Şarkılar sekmesinden şarkı seç.";
+    case "user":
+      return "Bu bir profil linki. Profildeki playlist'lerden birini seç.";
+    default:
+      return "Geçerli bir Spotify playlist ya da profil linki gir.";
+  }
 }
